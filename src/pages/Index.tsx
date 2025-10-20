@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { ImageUpload } from '@/components/ImageUpload';
 import { ImageComparison } from '@/components/ImageComparison';
 import { ProcessingIndicator } from '@/components/ProcessingIndicator';
+import { ManualEditor } from '@/components/ManualEditor';
 import { removeBackground, loadImage } from '@/utils/backgroundRemoval';
 import { useToast } from '@/hooks/use-toast';
-import { Wand2 } from 'lucide-react';
+import { Wand2, Sparkles, Pipette } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Index = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -12,30 +14,38 @@ const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
+  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const { toast } = useToast();
 
   const handleImageSelect = async (file: File) => {
     try {
-      setIsProcessing(true);
-      setProgress(0);
-      setProcessedImage(null);
-
       // Load and display original image
       const imgElement = await loadImage(file);
       const originalUrl = URL.createObjectURL(file);
       setOriginalImage(originalUrl);
+      setImageElement(imgElement);
+      setProcessedImage(null);
+      setProcessedBlob(null);
 
-      // Remove background
-      const resultBlob = await removeBackground(imgElement, setProgress);
-      const resultUrl = URL.createObjectURL(resultBlob);
-      
-      setProcessedImage(resultUrl);
-      setProcessedBlob(resultBlob);
-      
-      toast({
-        title: 'Success!',
-        description: 'Background removed successfully',
-      });
+      // If AI mode, process immediately
+      if (mode === 'ai') {
+        setIsProcessing(true);
+        setProgress(0);
+
+        // Remove background with AI
+        const resultBlob = await removeBackground(imgElement, setProgress);
+        const resultUrl = URL.createObjectURL(resultBlob);
+        
+        setProcessedImage(resultUrl);
+        setProcessedBlob(resultBlob);
+        
+        toast({
+          title: 'Success!',
+          description: 'Background removed successfully',
+        });
+        setIsProcessing(false);
+      }
     } catch (error) {
       console.error('Error processing image:', error);
       toast({
@@ -43,9 +53,13 @@ const Index = () => {
         description: 'Failed to remove background. Please try again.',
         variant: 'destructive',
       });
-    } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleManualProcessed = (blob: Blob, url: string) => {
+    setProcessedImage(url);
+    setProcessedBlob(blob);
   };
 
   const handleDownload = () => {
@@ -65,6 +79,7 @@ const Index = () => {
     setOriginalImage(null);
     setProcessedImage(null);
     setProcessedBlob(null);
+    setImageElement(null);
     setProgress(0);
   };
 
@@ -87,13 +102,48 @@ const Index = () => {
 
         <main className="max-w-4xl mx-auto">
           {!originalImage && !isProcessing && (
-            <div className="animate-fade-in">
+            <div className="animate-fade-in space-y-6">
+              <Tabs value={mode} onValueChange={(v) => setMode(v as 'ai' | 'manual')} className="w-full">
+                <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+                  <TabsTrigger value="ai" className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    AI Removal
+                  </TabsTrigger>
+                  <TabsTrigger value="manual" className="flex items-center gap-2">
+                    <Pipette className="w-4 h-4" />
+                    Manual Selection
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="ai" className="mt-6">
+                  <div className="text-center mb-4">
+                    <p className="text-sm text-muted-foreground">
+                      Upload an image and let AI automatically detect and remove the background
+                    </p>
+                  </div>
+                </TabsContent>
+                <TabsContent value="manual" className="mt-6">
+                  <div className="text-center mb-4">
+                    <p className="text-sm text-muted-foreground">
+                      Upload an image and manually select which colors to remove
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
+              
               <ImageUpload onImageSelect={handleImageSelect} isProcessing={isProcessing} />
             </div>
           )}
 
           {isProcessing && (
             <ProcessingIndicator progress={progress} />
+          )}
+
+          {originalImage && mode === 'manual' && !processedImage && imageElement && !isProcessing && (
+            <ManualEditor
+              originalImage={originalImage}
+              imageElement={imageElement}
+              onProcessed={handleManualProcessed}
+            />
           )}
 
           {originalImage && processedImage && !isProcessing && (
