@@ -1,8 +1,9 @@
-import { pipeline, env } from '@huggingface/transformers';
+import { pipeline, env, RawImage } from '@huggingface/transformers';
 
-// Configure transformers.js to always download models
+// Configure transformers.js for optimal browser performance
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 1; // Optimize for web workers
 
 const MAX_IMAGE_DIMENSION = 1024;
 
@@ -31,58 +32,113 @@ function resizeImageIfNeeded(canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   return false;
 }
 
+// Apply alpha matting with feathering for smooth edges
+function applyAlphaMatting(
+  imageData: ImageData,
+  mask: Float32Array,
+  featherRadius: number = 2
+): void {
+  const { data, width, height } = imageData;
+  const tempAlpha = new Float32Array(mask.length);
+  
+  // Copy mask to temp array
+  for (let i = 0; i < mask.length; i++) {
+    tempAlpha[i] = mask[i];
+  }
+  
+  // Apply Gaussian blur for feathering
+  const kernel = [];
+  const sigma = featherRadius / 2;
+  for (let x = -featherRadius; x <= featherRadius; x++) {
+    for (let y = -featherRadius; y <= featherRadius; y++) {
+      const weight = Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
+      kernel.push({ x, y, weight });
+    }
+  }
+  
+  // Normalize kernel
+  const kernelSum = kernel.reduce((sum, k) => sum + k.weight, 0);
+  kernel.forEach(k => k.weight /= kernelSum);
+  
+  // Apply feathering
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      let blurred = 0;
+      
+      for (const k of kernel) {
+        const nx = x + k.x;
+        const ny = y + k.y;
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          blurred += tempAlpha[ny * width + nx] * k.weight;
+        }
+      }
+      
+      // Apply to alpha channel
+      data[idx * 4 + 3] = Math.round(blurred * 255);
+    }
+  }
+}
+
 export const removeBackground = async (
   imageElement: HTMLImageElement,
   onProgress?: (progress: number) => void
 ): Promise<Blob> => {
   try {
-    console.log('Starting background removal process...');
+    console.log('Starting WebGPU-accelerated background removal...');
     
-    if (onProgress) onProgress(10);
+    if (onProgress) onProgress(5);
     
-    const segmenter = await pipeline(
-      'image-segmentation', 
-      'Xenova/segformer-b0-finetuned-ade-512-512',
-      { device: 'webgpu' }
-    );
-    
-    if (onProgress) onProgress(30);
-    
-    // Convert HTMLImageElement to canvas
+    // Convert HTMLImageElement to canvas for preprocessing
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
     if (!ctx) throw new Error('Could not get canvas context');
     
-    // Resize image if needed and draw it to canvas
+    // Resize image if needed
     const wasResized = resizeImageIfNeeded(canvas, ctx, imageElement);
-    console.log(`Image ${wasResized ? 'was' : 'was not'} resized. Final dimensions: ${canvas.width}x${canvas.height}`);
+    console.log(`Image preprocessed. Dimensions: ${canvas.width}x${canvas.height}`);
+    
+    if (onProgress) onProgress(15);
+    
+    // Initialize segmentation pipeline with WebGPU (falls back to WASM automatically)
+    console.log('Loading segmentation model with WebGPU acceleration...');
+    const segmenter = await pipeline(
+      'image-segmentation',
+      'Xenova/segformer-b2-clothes',
+      { 
+        device: 'webgpu',
+        dtype: 'fp16', // Use half-precision for faster inference
+      }
+    );
     
     if (onProgress) onProgress(40);
     
-    // Get image data as base64
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
-    console.log('Image converted to base64');
+    // Convert canvas to format expected by the model
+    const imageData = canvas.toDataURL('image/png');
     
     if (onProgress) onProgress(50);
     
-    // Process the image with the segmentation model
-    console.log('Processing with segmentation model...');
-    const result = await segmenter(imageData);
+    // Run inference
+    console.log('Running segmentation inference...');
+    const result = await segmenter(imageData, {
+      threshold: 0.5,
+      mask_threshold: 0.5,
+    });
     
-    if (onProgress) onProgress(70);
+    if (onProgress) onProgress(75);
     
-    console.log('Segmentation result:', result);
+    console.log('Segmentation complete, applying alpha matting...');
     
     if (!result || !Array.isArray(result) || result.length === 0 || !result[0].mask) {
       throw new Error('Invalid segmentation result');
     }
     
-    // Create a new canvas for the masked image
+    // Create output canvas
     const outputCanvas = document.createElement('canvas');
     outputCanvas.width = canvas.width;
     outputCanvas.height = canvas.height;
-    const outputCtx = outputCanvas.getContext('2d');
+    const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
     
     if (!outputCtx) throw new Error('Could not get output canvas context');
     
@@ -91,36 +147,36 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(85);
     
-    // Apply the mask
-    const outputImageData = outputCtx.getImageData(
-      0, 0,
-      outputCanvas.width,
-      outputCanvas.height
-    );
-    const data = outputImageData.data;
+    // Get image data for alpha channel manipulation
+    const outputImageData = outputCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
     
-    // Apply inverted mask to alpha channel
-    for (let i = 0; i < result[0].mask.data.length; i++) {
-      // Invert the mask value (1 - value) to keep the subject instead of the background
-      const alpha = Math.round((1 - result[0].mask.data[i]) * 255);
-      data[i * 4 + 3] = alpha;
+    // Apply mask with alpha matting and feathering
+    const maskData = result[0].mask.data;
+    const invertedMask = new Float32Array(maskData.length);
+    
+    // Invert mask (keep subject, remove background)
+    for (let i = 0; i < maskData.length; i++) {
+      invertedMask[i] = 1 - maskData[i];
     }
     
+    // Apply alpha matting with edge feathering
+    applyAlphaMatting(outputImageData, invertedMask, 3);
+    
     outputCtx.putImageData(outputImageData, 0, 0);
-    console.log('Mask applied successfully');
+    console.log('Alpha matting applied with feathered edges');
     
     if (onProgress) onProgress(95);
     
-    // Convert canvas to blob
+    // Convert to high-quality PNG blob
     return new Promise((resolve, reject) => {
       outputCanvas.toBlob(
         (blob) => {
           if (blob) {
-            console.log('Successfully created final blob');
+            console.log('Background removal complete');
             if (onProgress) onProgress(100);
             resolve(blob);
           } else {
-            reject(new Error('Failed to create blob'));
+            reject(new Error('Failed to create output blob'));
           }
         },
         'image/png',
@@ -128,7 +184,7 @@ export const removeBackground = async (
       );
     });
   } catch (error) {
-    console.error('Error removing background:', error);
+    console.error('Background removal error:', error);
     throw error;
   }
 };
