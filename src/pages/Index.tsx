@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { ImageUpload } from '@/components/ImageUpload';
-import { ImageComparison } from '@/components/ImageComparison';
-import { ProcessingIndicator } from '@/components/ProcessingIndicator';
-import { ManualEditor } from '@/components/ManualEditor';
-import { removeBackground, loadImage } from '@/utils/backgroundRemoval';
-import { useToast } from '@/hooks/use-toast';
-import { Wand2, Sparkles, Pipette } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState } from "react";
+import { ImageUpload } from "@/components/ImageUpload";
+import { ImageComparison } from "@/components/ImageComparison";
+import { ProcessingIndicator } from "@/components/ProcessingIndicator";
+import { ManualEditor } from "@/components/ManualEditor";
+import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
+import { useToast } from "@/hooks/use-toast";
+import { Wand2, Sparkles, Pipette } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -15,7 +15,7 @@ const Index = () => {
   const [progress, setProgress] = useState(0);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
-  const [mode, setMode] = useState<'ai' | 'manual'>('ai');
+  const [mode, setMode] = useState<"ai" | "manual">("ai");
   const { toast } = useToast();
 
   const handleImageSelect = async (file: File) => {
@@ -29,29 +29,29 @@ const Index = () => {
       setProcessedBlob(null);
 
       // If AI mode, process immediately
-      if (mode === 'ai') {
+      if (mode === "ai") {
         setIsProcessing(true);
         setProgress(0);
 
         // Remove background with AI
         const resultBlob = await removeBackground(imgElement, setProgress);
         const resultUrl = URL.createObjectURL(resultBlob);
-        
+
         setProcessedImage(resultUrl);
         setProcessedBlob(resultBlob);
-        
+
         toast({
-          title: 'Success!',
-          description: 'Background removed successfully',
+          title: "Success!",
+          description: "Background removed successfully",
         });
         setIsProcessing(false);
       }
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error("Error processing image:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to remove background. Please try again.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to remove background. Please try again.",
+        variant: "destructive",
       });
       setIsProcessing(false);
     }
@@ -65,7 +65,7 @@ const Index = () => {
   const handleDownload = () => {
     if (processedBlob) {
       const url = URL.createObjectURL(processedBlob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `removed-bg-${Date.now()}.png`;
       document.body.appendChild(a);
@@ -92,18 +92,19 @@ const Index = () => {
               <Wand2 className="w-6 h-6 text-primary-foreground" />
             </div>
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              BG Remover
+              BG Eraser
             </h1>
           </div>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results in seconds.
+            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
+            in seconds.
           </p>
         </header>
 
         <main className="max-w-4xl mx-auto">
           {!originalImage && !isProcessing && (
             <div className="animate-fade-in space-y-6">
-              <Tabs value={mode} onValueChange={(v) => setMode(v as 'ai' | 'manual')} className="w-full">
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "ai" | "manual")} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
                   <TabsTrigger value="ai" className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
@@ -129,16 +130,14 @@ const Index = () => {
                   </div>
                 </TabsContent>
               </Tabs>
-              
+
               <ImageUpload onImageSelect={handleImageSelect} isProcessing={isProcessing} />
             </div>
           )}
 
-          {isProcessing && (
-            <ProcessingIndicator progress={progress} />
-          )}
+          {isProcessing && <ProcessingIndicator progress={progress} />}
 
-          {originalImage && mode === 'manual' && !processedImage && imageElement && !isProcessing && (
+          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && (
             <ManualEditor
               originalImage={originalImage}
               imageElement={imageElement}
