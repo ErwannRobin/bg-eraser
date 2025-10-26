@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { ImageComparison } from "@/components/ImageComparison";
 import { ProcessingIndicator } from "@/components/ProcessingIndicator";
@@ -82,6 +82,28 @@ const Index = () => {
     setImageElement(null);
     setProgress(0);
   };
+
+  // Handle paste events for image pasting
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            await handleImageSelect(file);
+          }
+          break;
+        }
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [mode, isProcessing]);
 
   return (
     <div className="min-h-screen bg-gradient-bg">

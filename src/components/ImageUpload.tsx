@@ -70,7 +70,7 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
             Drop your image here
           </p>
           <p className="text-sm text-muted-foreground">
-            or click to browse • PNG, JPG, WEBP
+            or click to browse, or paste (Ctrl+V) • PNG, JPG, WEBP
           </p>
         </div>
       </div>
