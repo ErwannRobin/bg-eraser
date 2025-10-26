@@ -1,4 +1,4 @@
-import { pipeline, env, RawImage } from '@huggingface/transformers';
+import { AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
 
 // Configure transformers.js for optimal browser performance
 env.allowLocalModels = false;
@@ -101,36 +101,45 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(15);
     
-    // Initialize segmentation pipeline with WebGPU (falls back to WASM automatically)
-    console.log('Loading segmentation model with WebGPU acceleration...');
-    const segmenter = await pipeline(
-      'image-segmentation',
-      'Xenova/modnet',
-      { 
-        device: 'webgpu',
-        dtype: 'fp32',
-      }
-    );
+    // Initialize RMBG model with WebGPU (falls back to WASM automatically)
+    console.log('Loading BRIA RMBG-1.4 model with WebGPU acceleration...');
+    const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
+      device: 'webgpu',
+      config: { model_type: 'custom' } as any,
+    });
+    
+    const processor = await AutoProcessor.from_pretrained('briaai/RMBG-1.4', {
+      config: {
+        do_normalize: true,
+        do_pad: false,
+        do_rescale: true,
+        do_resize: true,
+        image_mean: [0.5, 0.5, 0.5],
+        feature_extractor_type: "ImageFeatureExtractor",
+        image_std: [1, 1, 1],
+        resample: 2,
+        rescale_factor: 0.00392156862745098,
+        size: { width: 1024, height: 1024 },
+      } as any
+    });
     
     if (onProgress) onProgress(40);
     
-    // Convert canvas to format expected by the model
-    const imageData = canvas.toDataURL('image/png');
+    // Convert canvas to RawImage
+    const image = await RawImage.fromURL(canvas.toDataURL('image/png'));
     
     if (onProgress) onProgress(50);
     
-    // Run inference
+    // Preprocess and run inference
     console.log('Running segmentation inference...');
-    const result = await segmenter(imageData, {
-      threshold: 0.5,
-      mask_threshold: 0.5,
-    });
+    const { pixel_values } = await processor(image);
+    const { output } = await model({ input: pixel_values });
     
     if (onProgress) onProgress(75);
     
     console.log('Segmentation complete, applying alpha matting...');
     
-    if (!result || !Array.isArray(result) || result.length === 0 || !result[0].mask) {
+    if (!output) {
       throw new Error('Invalid segmentation result');
     }
     
@@ -150,17 +159,17 @@ export const removeBackground = async (
     // Get image data for alpha channel manipulation
     const outputImageData = outputCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
     
-    // Apply mask with alpha matting and feathering
-    const maskData = result[0].mask.data;
-    const invertedMask = new Float32Array(maskData.length);
+    // Resize mask back to original size
+    const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(canvas.width, canvas.height);
     
-    // Invert mask (keep subject, remove background)
-    for (let i = 0; i < maskData.length; i++) {
-      invertedMask[i] = 1 - maskData[i];
+    // Convert mask to Float32Array for alpha matting
+    const maskFloat = new Float32Array(mask.data.length);
+    for (let i = 0; i < mask.data.length; i++) {
+      maskFloat[i] = mask.data[i] / 255;
     }
     
     // Apply alpha matting with edge feathering
-    applyAlphaMatting(outputImageData, invertedMask, 3);
+    applyAlphaMatting(outputImageData, maskFloat, 3);
     
     outputCtx.putImageData(outputImageData, 0, 0);
     console.log('Alpha matting applied with feathered edges');
