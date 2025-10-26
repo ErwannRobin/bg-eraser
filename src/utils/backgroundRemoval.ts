@@ -105,10 +105,10 @@ export const removeBackground = async (
     console.log('Loading segmentation model with WebGPU acceleration...');
     const segmenter = await pipeline(
       'image-segmentation',
-      'Xenova/segformer-b2-clothes',
+      'Xenova/modnet',
       { 
         device: 'webgpu',
-        dtype: 'fp16', // Use half-precision for faster inference
+        dtype: 'fp32',
       }
     );
     
