@@ -3,6 +3,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { ImageComparison } from "@/components/ImageComparison";
 import { ProcessingIndicator } from "@/components/ProcessingIndicator";
 import { ManualEditor } from "@/components/ManualEditor";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { useToast } from "@/hooks/use-toast";
 import { Wand2, Sparkles, Pipette } from "lucide-react";
@@ -108,6 +109,10 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container mx-auto px-4 py-12">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
+        
         <header className="text-center mb-12 animate-fade-in">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
