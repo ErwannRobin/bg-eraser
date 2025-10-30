@@ -10,7 +10,6 @@ import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { useToast } from "@/hooks/use-toast";
 import { Wand2, Sparkles, Pipette, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
 const Index = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
@@ -21,8 +20,9 @@ const Index = () => {
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
-  const { toast } = useToast();
-
+  const {
+    toast
+  } = useToast();
   const handleImageSelect = async (file: File) => {
     try {
       // Load and display original image
@@ -41,13 +41,11 @@ const Index = () => {
         // Remove background with AI
         const resultBlob = await removeBackground(imgElement, setProgress);
         const resultUrl = URL.createObjectURL(resultBlob);
-
         setProcessedImage(resultUrl);
         setProcessedBlob(resultBlob);
-
         toast({
           title: "Success!",
-          description: "Background removed successfully",
+          description: "Background removed successfully"
         });
         setIsProcessing(false);
       }
@@ -56,21 +54,18 @@ const Index = () => {
       toast({
         title: "Error",
         description: "Failed to remove background. Please try again.",
-        variant: "destructive",
+        variant: "destructive"
       });
       setIsProcessing(false);
     }
   };
-
   const handleManualProcessed = (blob: Blob, url: string) => {
     setProcessedImage(url);
     setProcessedBlob(blob);
   };
-
   const handleStartCrop = () => {
     setIsCropping(true);
   };
-
   const handleCropApplied = (blob: Blob, url: string) => {
     setProcessedImage(url);
     setProcessedBlob(blob);
@@ -78,14 +73,12 @@ const Index = () => {
     setHasCropped(true);
     toast({
       title: "Success!",
-      description: "Image cropped successfully",
+      description: "Image cropped successfully"
     });
   };
-
   const handleCropCancel = () => {
     setIsCropping(false);
   };
-
   const handleDownload = () => {
     if (processedBlob) {
       const url = URL.createObjectURL(processedBlob);
@@ -98,7 +91,6 @@ const Index = () => {
       URL.revokeObjectURL(url);
     }
   };
-
   const handleReset = () => {
     setOriginalImage(null);
     setProcessedImage(null);
@@ -113,7 +105,6 @@ const Index = () => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-
       for (const item of Array.from(items)) {
         if (item.type.startsWith('image/')) {
           e.preventDefault();
@@ -125,13 +116,10 @@ const Index = () => {
         }
       }
     };
-
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   }, [mode, isProcessing]);
-
-  return (
-    <div className="min-h-screen bg-gradient-bg">
+  return <div className="min-h-screen bg-gradient-bg">
       <div className="container mx-auto px-4 py-12">
         <div className="absolute top-4 right-4">
           <ThemeToggle />
@@ -146,16 +134,13 @@ const Index = () => {
               BG Eraser
             </h1>
           </div>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
-            in seconds.
-          </p>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Remove image backgrounds instantly with AI-powered precision.
+Upload your photo and get professional results in seconds.</p>
         </header>
 
         <main className="max-w-4xl mx-auto">
-          {!originalImage && !isProcessing && (
-            <div className="animate-fade-in space-y-6">
-              <Tabs value={mode} onValueChange={(v) => setMode(v as "ai" | "manual")} className="w-full">
+          {!originalImage && !isProcessing && <div className="animate-fade-in space-y-6">
+              <Tabs value={mode} onValueChange={v => setMode(v as "ai" | "manual")} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
                   <TabsTrigger value="ai" className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
@@ -183,83 +168,45 @@ const Index = () => {
               </Tabs>
 
               <ImageUpload onImageSelect={handleImageSelect} isProcessing={isProcessing} />
-            </div>
-          )}
+            </div>}
 
           {isProcessing && <ProcessingIndicator progress={progress} />}
 
-          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && (
-            <ManualEditor
-              originalImage={originalImage}
-              imageElement={imageElement}
-              onProcessed={handleManualProcessed}
-            />
-          )}
+          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && <ManualEditor originalImage={originalImage} imageElement={imageElement} onProcessed={handleManualProcessed} />}
 
-          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && (
-            <div className="space-y-6">
-              <ImageComparison
-                originalImage={originalImage}
-                processedImage={processedImage}
-                onDownload={handleDownload}
-                onStartCrop={handleStartCrop}
-              />
+          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && <div className="space-y-6">
+              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onStartCrop={handleStartCrop} />
               <div className="flex justify-center">
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-                >
+                <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
                   Upload another image
                 </button>
               </div>
-            </div>
-          )}
+            </div>}
 
-          {processedImage && !isProcessing && !isCropping && hasCropped && (
-            <div className="space-y-6 animate-fade-in">
+          {processedImage && !isProcessing && !isCropping && hasCropped && <div className="space-y-6 animate-fade-in">
               <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
-                <img
-                  src={processedImage}
-                  alt="Cropped result"
-                  className="w-full h-full object-contain"
-                />
+                <img src={processedImage} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
               <div className="flex justify-center">
-                <Button
-                  onClick={handleDownload}
-                  size="lg"
-                  className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
-                >
+                <Button onClick={handleDownload} size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft">
                   <Download className="w-5 h-5 mr-2" />
                   Download HD Image
                 </Button>
               </div>
               <div className="flex justify-center">
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-                >
+                <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
                   Upload another image
                 </button>
               </div>
-            </div>
-          )}
+            </div>}
 
-          {isCropping && processedImage && (
-            <CropEditor
-              imageUrl={processedImage}
-              onCropApplied={handleCropApplied}
-              onCancel={handleCropCancel}
-            />
-          )}
+          {isCropping && processedImage && <CropEditor imageUrl={processedImage} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />}
         </main>
 
         <footer className="mt-16 text-center text-sm text-muted-foreground">
           <p>All processing happens in your browser. Your images never leave your device.</p>
         </footer>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
