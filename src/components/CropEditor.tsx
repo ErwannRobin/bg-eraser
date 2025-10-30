@@ -16,52 +16,91 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 });
 
   useEffect(() => {
-    if (imageRef.current && imageLoaded) {
-      // Auto-detect content bounds
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      if (ctx) {
-        canvas.width = imageRef.current.naturalWidth;
-        canvas.height = imageRef.current.naturalHeight;
-        ctx.drawImage(imageRef.current, 0, 0);
+    const updateImageDimensions = () => {
+      if (imageRef.current && containerRef.current && imageLoaded) {
+        const img = imageRef.current;
+        const container = containerRef.current;
+        
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const containerAspect = containerWidth / containerHeight;
+        
+        let displayWidth, displayHeight, offsetX, offsetY;
+        
+        if (imgAspect > containerAspect) {
+          // Image is wider - fit to width
+          displayWidth = containerWidth;
+          displayHeight = containerWidth / imgAspect;
+          offsetX = 0;
+          offsetY = (containerHeight - displayHeight) / 2;
+        } else {
+          // Image is taller - fit to height
+          displayHeight = containerHeight;
+          displayWidth = containerHeight * imgAspect;
+          offsetY = 0;
+          offsetX = (containerWidth - displayWidth) / 2;
+        }
+        
+        setImageDimensions({ width: displayWidth, height: displayHeight, offsetX, offsetY });
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const pixels = imageData.data;
+        // Auto-detect content bounds
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx) {
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          ctx.drawImage(img, 0, 0);
 
-        let minX = canvas.width;
-        let minY = canvas.height;
-        let maxX = 0;
-        let maxY = 0;
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const pixels = imageData.data;
 
-        for (let y = 0; y < canvas.height; y++) {
-          for (let x = 0; x < canvas.width; x++) {
-            const alpha = pixels[(y * canvas.width + x) * 4 + 3];
-            if (alpha > 0) {
-              minX = Math.min(minX, x);
-              minY = Math.min(minY, y);
-              maxX = Math.max(maxX, x);
-              maxY = Math.max(maxY, y);
+          let minX = canvas.width;
+          let minY = canvas.height;
+          let maxX = 0;
+          let maxY = 0;
+
+          for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+              const alpha = pixels[(y * canvas.width + x) * 4 + 3];
+              if (alpha > 0) {
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+              }
             }
           }
+
+          const padding = 2;
+          minX = Math.max(0, minX - padding);
+          minY = Math.max(0, minY - padding);
+          maxX = Math.min(canvas.width - 1, maxX + padding);
+          maxY = Math.min(canvas.height - 1, maxY + padding);
+
+          // Convert natural coordinates to display percentages
+          const xPercent = ((minX / canvas.width) * displayWidth + offsetX) / containerWidth * 100;
+          const yPercent = ((minY / canvas.height) * displayHeight + offsetY) / containerHeight * 100;
+          const widthPercent = ((maxX - minX + 1) / canvas.width) * displayWidth / containerWidth * 100;
+          const heightPercent = ((maxY - minY + 1) / canvas.height) * displayHeight / containerHeight * 100;
+
+          setCrop({
+            x: xPercent,
+            y: yPercent,
+            width: widthPercent,
+            height: heightPercent,
+          });
         }
-
-        const padding = 2;
-        minX = Math.max(0, minX - padding);
-        minY = Math.max(0, minY - padding);
-        maxX = Math.min(canvas.width - 1, maxX + padding);
-        maxY = Math.min(canvas.height - 1, maxY + padding);
-
-        setCrop({
-          x: (minX / canvas.width) * 100,
-          y: (minY / canvas.height) * 100,
-          width: ((maxX - minX + 1) / canvas.width) * 100,
-          height: ((maxY - minY + 1) / canvas.height) * 100,
-        });
       }
-    }
+    };
+
+    updateImageDimensions();
+    window.addEventListener('resize', updateImageDimensions);
+    return () => window.removeEventListener('resize', updateImageDimensions);
   }, [imageLoaded]);
 
   const handleMouseDown = (e: React.MouseEvent, handle?: string) => {
@@ -75,17 +114,22 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || imageDimensions.width === 0) return;
 
     const rect = containerRef.current.getBoundingClientRect();
     const dx = ((e.clientX - dragStart.x) / rect.width) * 100;
     const dy = ((e.clientY - dragStart.y) / rect.height) * 100;
 
+    const minX = (imageDimensions.offsetX / rect.width) * 100;
+    const minY = (imageDimensions.offsetY / rect.height) * 100;
+    const maxX = ((imageDimensions.offsetX + imageDimensions.width) / rect.width) * 100;
+    const maxY = ((imageDimensions.offsetY + imageDimensions.height) / rect.height) * 100;
+
     if (isDragging) {
       setCrop(prev => ({
         ...prev,
-        x: Math.max(0, Math.min(100 - prev.width, prev.x + dx)),
-        y: Math.max(0, Math.min(100 - prev.height, prev.y + dy)),
+        x: Math.max(minX, Math.min(maxX - prev.width, prev.x + dx)),
+        y: Math.max(minY, Math.min(maxY - prev.height, prev.y + dy)),
       }));
       setDragStart({ x: e.clientX, y: e.clientY });
     } else if (resizing) {
@@ -93,20 +137,20 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
         let newCrop = { ...prev };
         
         if (resizing.includes('n')) {
-          const newY = Math.max(0, Math.min(prev.y + prev.height - 5, prev.y + dy));
+          const newY = Math.max(minY, Math.min(prev.y + prev.height - 5, prev.y + dy));
           newCrop.height = prev.height + (prev.y - newY);
           newCrop.y = newY;
         }
         if (resizing.includes('s')) {
-          newCrop.height = Math.max(5, Math.min(100 - prev.y, prev.height + dy));
+          newCrop.height = Math.max(5, Math.min(maxY - prev.y, prev.height + dy));
         }
         if (resizing.includes('w')) {
-          const newX = Math.max(0, Math.min(prev.x + prev.width - 5, prev.x + dx));
+          const newX = Math.max(minX, Math.min(prev.x + prev.width - 5, prev.x + dx));
           newCrop.width = prev.width + (prev.x - newX);
           newCrop.x = newX;
         }
         if (resizing.includes('e')) {
-          newCrop.width = Math.max(5, Math.min(100 - prev.x, prev.width + dx));
+          newCrop.width = Math.max(5, Math.min(maxX - prev.x, prev.width + dx));
         }
         
         return newCrop;
@@ -121,20 +165,31 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   };
 
   const handleApplyCrop = async () => {
-    if (!imageRef.current) return;
+    if (!imageRef.current || !containerRef.current || imageDimensions.width === 0) return;
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const img = imageRef.current;
+    const container = containerRef.current;
     const naturalWidth = img.naturalWidth;
     const naturalHeight = img.naturalHeight;
 
-    const cropX = (crop.x / 100) * naturalWidth;
-    const cropY = (crop.y / 100) * naturalHeight;
-    const cropWidth = (crop.width / 100) * naturalWidth;
-    const cropHeight = (crop.height / 100) * naturalHeight;
+    // Convert container percentages to display pixels
+    const cropXDisplay = (crop.x / 100) * container.clientWidth - imageDimensions.offsetX;
+    const cropYDisplay = (crop.y / 100) * container.clientHeight - imageDimensions.offsetY;
+    const cropWidthDisplay = (crop.width / 100) * container.clientWidth;
+    const cropHeightDisplay = (crop.height / 100) * container.clientHeight;
+
+    // Convert display pixels to natural pixels
+    const scaleX = naturalWidth / imageDimensions.width;
+    const scaleY = naturalHeight / imageDimensions.height;
+    
+    const cropX = cropXDisplay * scaleX;
+    const cropY = cropYDisplay * scaleY;
+    const cropWidth = cropWidthDisplay * scaleX;
+    const cropHeight = cropHeightDisplay * scaleY;
 
     canvas.width = cropWidth;
     canvas.height = cropHeight;
@@ -167,7 +222,8 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
       
       <div
         ref={containerRef}
-        className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong"
+        className="relative w-full bg-muted rounded-lg overflow-hidden shadow-strong"
+        style={{ aspectRatio: imageRef.current ? `${imageRef.current.naturalWidth} / ${imageRef.current.naturalHeight}` : '16/9' }}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
