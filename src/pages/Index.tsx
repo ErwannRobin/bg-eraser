@@ -63,6 +63,11 @@ const Index = () => {
     setProcessedBlob(blob);
   };
 
+  const handleCropApplied = (blob: Blob, url: string) => {
+    setProcessedImage(url);
+    setProcessedBlob(blob);
+  };
+
   const handleDownload = () => {
     if (processedBlob) {
       const url = URL.createObjectURL(processedBlob);
@@ -178,6 +183,7 @@ const Index = () => {
                 originalImage={originalImage}
                 processedImage={processedImage}
                 onDownload={handleDownload}
+                onCropApplied={handleCropApplied}
               />
               <div className="flex justify-center">
                 <button

@@ -1,22 +1,50 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download } from 'lucide-react';
+import { Download, Crop } from 'lucide-react';
+import { cropToContent } from '@/utils/imageCrop';
+import { useToast } from '@/hooks/use-toast';
 
 interface ImageComparisonProps {
   originalImage: string;
   processedImage: string;
   onDownload: () => void;
+  onCropApplied: (blob: Blob, url: string) => void;
 }
 
 export const ImageComparison = ({
   originalImage,
   processedImage,
   onDownload,
+  onCropApplied,
 }: ImageComparisonProps) => {
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [isCropping, setIsCropping] = useState(false);
+  const { toast } = useToast();
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSliderPosition(Number(e.target.value));
+  };
+
+  const handleCrop = async () => {
+    setIsCropping(true);
+    try {
+      const croppedBlob = await cropToContent(processedImage);
+      const croppedUrl = URL.createObjectURL(croppedBlob);
+      onCropApplied(croppedBlob, croppedUrl);
+      toast({
+        title: "Success!",
+        description: "Image cropped to content",
+      });
+    } catch (error) {
+      console.error('Error cropping image:', error);
+      toast({
+        title: "Error",
+        description: "Failed to crop image. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCropping(false);
+    }
   };
 
   return (
@@ -62,7 +90,16 @@ export const ImageComparison = ({
           Processed
         </div>
       </div>
-      <div className="flex justify-center">
+      <div className="flex justify-center gap-3">
+        <Button
+          onClick={handleCrop}
+          size="lg"
+          variant="outline"
+          disabled={isCropping}
+        >
+          <Crop className="w-5 h-5 mr-2" />
+          {isCropping ? 'Cropping...' : 'Crop to Content'}
+        </Button>
         <Button
           onClick={onDownload}
           size="lg"
