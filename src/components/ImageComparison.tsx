@@ -23,7 +23,7 @@ export const ImageComparison = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong">
+      <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
         <div className="absolute inset-0">
           <img
             src={processedImage}

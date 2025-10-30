@@ -222,7 +222,7 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
       
       <div
         ref={containerRef}
-        className="relative w-full bg-muted rounded-lg overflow-hidden shadow-strong"
+        className="relative w-full bg-muted rounded-lg overflow-hidden shadow-strong checkerboard"
         style={{ aspectRatio: imageRef.current ? `${imageRef.current.naturalWidth} / ${imageRef.current.naturalHeight}` : '16/9' }}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
