@@ -3,6 +3,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { ImageComparison } from "@/components/ImageComparison";
 import { ProcessingIndicator } from "@/components/ProcessingIndicator";
 import { ManualEditor } from "@/components/ManualEditor";
+import { CropEditor } from "@/components/CropEditor";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,7 @@ const Index = () => {
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
+  const [isCropping, setIsCropping] = useState(false);
   const { toast } = useToast();
 
   const handleImageSelect = async (file: File) => {
@@ -63,9 +65,22 @@ const Index = () => {
     setProcessedBlob(blob);
   };
 
+  const handleStartCrop = () => {
+    setIsCropping(true);
+  };
+
   const handleCropApplied = (blob: Blob, url: string) => {
     setProcessedImage(url);
     setProcessedBlob(blob);
+    setIsCropping(false);
+    toast({
+      title: "Success!",
+      description: "Image cropped successfully",
+    });
+  };
+
+  const handleCropCancel = () => {
+    setIsCropping(false);
   };
 
   const handleDownload = () => {
@@ -177,13 +192,13 @@ const Index = () => {
             />
           )}
 
-          {originalImage && processedImage && !isProcessing && (
+          {originalImage && processedImage && !isProcessing && !isCropping && (
             <div className="space-y-6">
               <ImageComparison
                 originalImage={originalImage}
                 processedImage={processedImage}
                 onDownload={handleDownload}
-                onCropApplied={handleCropApplied}
+                onStartCrop={handleStartCrop}
               />
               <div className="flex justify-center">
                 <button
@@ -194,6 +209,14 @@ const Index = () => {
                 </button>
               </div>
             </div>
+          )}
+
+          {isCropping && processedImage && (
+            <CropEditor
+              imageUrl={processedImage}
+              onCropApplied={handleCropApplied}
+              onCancel={handleCropCancel}
+            />
           )}
         </main>
 
