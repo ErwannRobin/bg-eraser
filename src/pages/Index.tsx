@@ -5,9 +5,10 @@ import { ProcessingIndicator } from "@/components/ProcessingIndicator";
 import { ManualEditor } from "@/components/ManualEditor";
 import { CropEditor } from "@/components/CropEditor";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Sparkles, Pipette } from "lucide-react";
+import { Wand2, Sparkles, Pipette, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
@@ -19,6 +20,7 @@ const Index = () => {
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [isCropping, setIsCropping] = useState(false);
+  const [hasCropped, setHasCropped] = useState(false);
   const { toast } = useToast();
 
   const handleImageSelect = async (file: File) => {
@@ -73,6 +75,7 @@ const Index = () => {
     setProcessedImage(url);
     setProcessedBlob(blob);
     setIsCropping(false);
+    setHasCropped(true);
     toast({
       title: "Success!",
       description: "Image cropped successfully",
@@ -102,6 +105,7 @@ const Index = () => {
     setProcessedBlob(null);
     setImageElement(null);
     setProgress(0);
+    setHasCropped(false);
   };
 
   // Handle paste events for image pasting
@@ -192,7 +196,7 @@ const Index = () => {
             />
           )}
 
-          {originalImage && processedImage && !isProcessing && !isCropping && (
+          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && (
             <div className="space-y-6">
               <ImageComparison
                 originalImage={originalImage}
@@ -200,6 +204,36 @@ const Index = () => {
                 onDownload={handleDownload}
                 onStartCrop={handleStartCrop}
               />
+              <div className="flex justify-center">
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                >
+                  Upload another image
+                </button>
+              </div>
+            </div>
+          )}
+
+          {processedImage && !isProcessing && !isCropping && hasCropped && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
+                <img
+                  src={processedImage}
+                  alt="Cropped result"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="flex justify-center">
+                <Button
+                  onClick={handleDownload}
+                  size="lg"
+                  className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+                >
+                  <Download className="w-5 h-5 mr-2" />
+                  Download HD Image
+                </Button>
+              </div>
               <div className="flex justify-center">
                 <button
                   onClick={handleReset}
