@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Sparkles, Pipette, Download } from "lucide-react";
+import { Wand2, Sparkles, Pipette, Download, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const Index = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -89,6 +89,29 @@ const Index = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (processedBlob) {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [processedBlob.type]: processedBlob
+          })
+        ]);
+        toast({
+          title: "Copied!",
+          description: "Image copied to clipboard"
+        });
+      } catch (error) {
+        console.error("Error copying image:", error);
+        toast({
+          title: "Error",
+          description: "Failed to copy image to clipboard",
+          variant: "destructive"
+        });
+      }
     }
   };
   const handleReset = () => {
@@ -175,7 +198,7 @@ Upload your photo and get professional results in seconds.</p>
           {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && <ManualEditor originalImage={originalImage} imageElement={imageElement} onProcessed={handleManualProcessed} />}
 
           {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && <div className="space-y-6">
-              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onStartCrop={handleStartCrop} />
+              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onCopy={handleCopy} onStartCrop={handleStartCrop} />
               <div className="flex justify-center">
                 <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
                   Upload another image
@@ -187,7 +210,11 @@ Upload your photo and get professional results in seconds.</p>
               <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
                 <img src={processedImage} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
-              <div className="flex justify-center">
+              <div className="flex justify-center gap-3">
+                <Button onClick={handleCopy} size="lg" variant="outline">
+                  <Copy className="w-5 h-5 mr-2" />
+                  Copy to Clipboard
+                </Button>
                 <Button onClick={handleDownload} size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft">
                   <Download className="w-5 h-5 mr-2" />
                   Download HD Image

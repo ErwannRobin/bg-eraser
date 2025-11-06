@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Crop } from 'lucide-react';
+import { Download, Crop, Copy } from 'lucide-react';
 
 interface ImageComparisonProps {
   originalImage: string;
   processedImage: string;
   onDownload: () => void;
+  onCopy: () => void;
   onStartCrop: () => void;
 }
 
@@ -13,6 +14,7 @@ export const ImageComparison = ({
   originalImage,
   processedImage,
   onDownload,
+  onCopy,
   onStartCrop,
 }: ImageComparisonProps) => {
   const [sliderPosition, setSliderPosition] = useState(50);
@@ -72,6 +74,14 @@ export const ImageComparison = ({
         >
           <Crop className="w-5 h-5 mr-2" />
           Crop Image
+        </Button>
+        <Button
+          onClick={onCopy}
+          size="lg"
+          variant="outline"
+        >
+          <Copy className="w-5 h-5 mr-2" />
+          Copy to Clipboard
         </Button>
         <Button
           onClick={onDownload}
