@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Crop, Copy } from 'lucide-react';
+import { Download, Crop, Copy, Maximize2 } from 'lucide-react';
 
 interface ImageComparisonProps {
   originalImage: string;
@@ -8,6 +8,8 @@ interface ImageComparisonProps {
   onDownload: () => void;
   onCopy: () => void;
   onStartCrop: () => void;
+  onUpscale: () => void;
+  isUpscaling?: boolean;
 }
 
 export const ImageComparison = ({
@@ -16,6 +18,8 @@ export const ImageComparison = ({
   onDownload,
   onCopy,
   onStartCrop,
+  onUpscale,
+  isUpscaling = false,
 }: ImageComparisonProps) => {
   const [sliderPosition, setSliderPosition] = useState(50);
 
@@ -66,32 +70,41 @@ export const ImageComparison = ({
           Processed
         </div>
       </div>
-      <div className="flex justify-center gap-3">
-        <Button
-          onClick={onStartCrop}
-          size="lg"
-          variant="outline"
-        >
-          <Crop className="w-5 h-5 mr-2" />
-          Crop Image
-        </Button>
-        <Button
-          onClick={onCopy}
-          size="lg"
-          variant="outline"
-        >
-          <Copy className="w-5 h-5 mr-2" />
-          Copy to Clipboard
-        </Button>
-        <Button
-          onClick={onDownload}
-          size="lg"
-          className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
-        >
-          <Download className="w-5 h-5 mr-2" />
-          Download HD Image
-        </Button>
-      </div>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button
+            onClick={onStartCrop}
+            size="lg"
+            variant="outline"
+          >
+            <Crop className="w-5 h-5 mr-2" />
+            Crop Image
+          </Button>
+          <Button
+            onClick={onUpscale}
+            size="lg"
+            variant="secondary"
+            disabled={isUpscaling}
+          >
+            <Maximize2 className="w-5 h-5 mr-2" />
+            Upscale 2x
+          </Button>
+          <Button
+            onClick={onCopy}
+            size="lg"
+            variant="outline"
+          >
+            <Copy className="w-5 h-5 mr-2" />
+            Copy to Clipboard
+          </Button>
+          <Button
+            onClick={onDownload}
+            size="lg"
+            className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+          >
+            <Download className="w-5 h-5 mr-2" />
+            Download HD Image
+          </Button>
+        </div>
     </div>
   );
 };

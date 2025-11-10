@@ -6,9 +6,11 @@ import { ManualEditor } from "@/components/ManualEditor";
 import { CropEditor } from "@/components/CropEditor";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
+import { upscaleImage } from "@/utils/imageUpscale";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Sparkles, Pipette, Download, Copy } from "lucide-react";
+import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const Index = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -20,6 +22,7 @@ const Index = () => {
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
+  const [isUpscaling, setIsUpscaling] = useState(false);
   const {
     toast
   } = useToast();
@@ -114,6 +117,34 @@ const Index = () => {
       }
     }
   };
+
+  const handleUpscale = async () => {
+    if (!processedImage) return;
+    
+    try {
+      setIsUpscaling(true);
+      setProgress(0);
+      
+      const { blob, url } = await upscaleImage(processedImage, setProgress);
+      
+      setProcessedImage(url);
+      setProcessedBlob(blob);
+      
+      toast({
+        title: "Success!",
+        description: "Image upscaled to 2x resolution"
+      });
+    } catch (error) {
+      console.error("Error upscaling image:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upscale image",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUpscaling(false);
+    }
+  };
   const handleReset = () => {
     setOriginalImage(null);
     setProcessedImage(null);
@@ -194,11 +225,43 @@ Upload your photo and get professional results in seconds.</p>
             </div>}
 
           {isProcessing && <ProcessingIndicator progress={progress} />}
+          
+          {isUpscaling && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
+                <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
+                  <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-lg font-semibold text-foreground">
+                    Upscaling image...
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Enhancing resolution to 2x
+                  </p>
+                </div>
+                <div className="w-full max-w-xs">
+                  <Progress value={progress} className="h-2" />
+                  <p className="text-center text-sm text-muted-foreground mt-2">
+                    {progress}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && <ManualEditor originalImage={originalImage} imageElement={imageElement} onProcessed={handleManualProcessed} />}
 
-          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && <div className="space-y-6">
-              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onCopy={handleCopy} onStartCrop={handleStartCrop} />
+          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && !isUpscaling && <div className="space-y-6">
+              <ImageComparison 
+                originalImage={originalImage} 
+                processedImage={processedImage} 
+                onDownload={handleDownload} 
+                onCopy={handleCopy} 
+                onStartCrop={handleStartCrop}
+                onUpscale={handleUpscale}
+                isUpscaling={isUpscaling}
+              />
               <div className="flex justify-center">
                 <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
                   Upload another image
@@ -210,7 +273,11 @@ Upload your photo and get professional results in seconds.</p>
               <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
                 <img src={processedImage} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
-              <div className="flex justify-center gap-3">
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
+                  <Maximize2 className="w-5 h-5 mr-2" />
+                  Upscale 2x
+                </Button>
                 <Button onClick={handleCopy} size="lg" variant="outline">
                   <Copy className="w-5 h-5 mr-2" />
                   Copy to Clipboard
