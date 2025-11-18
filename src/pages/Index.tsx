@@ -287,7 +287,7 @@ Upload your photo and get professional results in seconds.</p>
 
 
 
-Vibe coded with ❤️ by Erwann
+Vibe coded with ❤️ by Erwann 
 All processing happens in your browser. Your images never leave your device.</p>
         </footer>
       </div>
