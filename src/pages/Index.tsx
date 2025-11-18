@@ -284,10 +284,7 @@ Upload your photo and get professional results in seconds.</p>
 
         <footer className="mt-16 text-center text-sm text-muted-foreground">
           <p>
-
-
-
-Vibe coded with ❤️ by Erwann 
+Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a><br>
 All processing happens in your browser. Your images never leave your device.</p>
         </footer>
       </div>
