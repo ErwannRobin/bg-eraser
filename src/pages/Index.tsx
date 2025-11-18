@@ -23,9 +23,7 @@ const Index = () => {
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
   const [isUpscaling, setIsUpscaling] = useState(false);
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
   const handleImageSelect = async (file: File) => {
     try {
       // Load and display original image
@@ -48,7 +46,7 @@ const Index = () => {
         setProcessedBlob(resultBlob);
         toast({
           title: "Success!",
-          description: "Background removed successfully"
+          description: "Background removed successfully",
         });
         setIsProcessing(false);
       }
@@ -57,7 +55,7 @@ const Index = () => {
       toast({
         title: "Error",
         description: "Failed to remove background. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
       setIsProcessing(false);
     }
@@ -76,7 +74,7 @@ const Index = () => {
     setHasCropped(true);
     toast({
       title: "Success!",
-      description: "Image cropped successfully"
+      description: "Image cropped successfully",
     });
   };
   const handleCropCancel = () => {
@@ -97,19 +95,21 @@ const Index = () => {
   const handleCopy = async () => {
     if (processedBlob) {
       try {
-        await navigator.clipboard.write([new ClipboardItem({
-          [processedBlob.type]: processedBlob
-        })]);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [processedBlob.type]: processedBlob,
+          }),
+        ]);
         toast({
           title: "Copied!",
-          description: "Image copied to clipboard"
+          description: "Image copied to clipboard",
         });
       } catch (error) {
         console.error("Error copying image:", error);
         toast({
           title: "Error",
           description: "Failed to copy image to clipboard",
-          variant: "destructive"
+          variant: "destructive",
         });
       }
     }
@@ -119,22 +119,19 @@ const Index = () => {
     try {
       setIsUpscaling(true);
       setProgress(0);
-      const {
-        blob,
-        url
-      } = await upscaleImage(processedImage, setProgress);
+      const { blob, url } = await upscaleImage(processedImage, setProgress);
       setProcessedImage(url);
       setProcessedBlob(blob);
       toast({
         title: "Success!",
-        description: "Image upscaled to 2x resolution"
+        description: "Image upscaled to 2x resolution",
       });
     } catch (error) {
       console.error("Error upscaling image:", error);
       toast({
         title: "Error",
         description: "Failed to upscale image",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsUpscaling(false);
@@ -155,7 +152,7 @@ const Index = () => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of Array.from(items)) {
-        if (item.type.startsWith('image/')) {
+        if (item.type.startsWith("image/")) {
           e.preventDefault();
           const file = item.getAsFile();
           if (file) {
@@ -165,15 +162,16 @@ const Index = () => {
         }
       }
     };
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
   }, [mode, isProcessing]);
-  return <div className="min-h-screen bg-gradient-bg">
+  return (
+    <div className="min-h-screen bg-gradient-bg">
       <div className="container mx-auto px-4 py-12">
         <div className="absolute top-4 right-4">
           <ThemeToggle />
         </div>
-        
+
         <header className="text-center mb-12 animate-fade-in">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
@@ -183,13 +181,16 @@ const Index = () => {
               BG Eraser
             </h1>
           </div>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Remove image backgrounds instantly with AI-powered precision.
-Upload your photo and get professional results in seconds.</p>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
+            in seconds.
+          </p>
         </header>
 
         <main className="max-w-4xl mx-auto">
-          {!originalImage && !isProcessing && <div className="animate-fade-in space-y-6">
-              <Tabs value={mode} onValueChange={v => setMode(v as "ai" | "manual")} className="w-full">
+          {!originalImage && !isProcessing && (
+            <div className="animate-fade-in space-y-6">
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "ai" | "manual")} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
                   <TabsTrigger value="ai" className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
@@ -217,44 +218,61 @@ Upload your photo and get professional results in seconds.</p>
               </Tabs>
 
               <ImageUpload onImageSelect={handleImageSelect} isProcessing={isProcessing} />
-            </div>}
+            </div>
+          )}
 
           {isProcessing && <ProcessingIndicator progress={progress} />}
-          
-          {isUpscaling && <div className="space-y-4 animate-fade-in">
+
+          {isUpscaling && (
+            <div className="space-y-4 animate-fade-in">
               <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
                 <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
                   <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
                 </div>
                 <div className="text-center space-y-2">
-                  <p className="text-lg font-semibold text-foreground">
-                    Upscaling image...
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Enhancing resolution to 2x
-                  </p>
+                  <p className="text-lg font-semibold text-foreground">Upscaling image...</p>
+                  <p className="text-sm text-muted-foreground">Enhancing resolution to 2x</p>
                 </div>
                 <div className="w-full max-w-xs">
                   <Progress value={progress} className="h-2" />
-                  <p className="text-center text-sm text-muted-foreground mt-2">
-                    {progress}%
-                  </p>
+                  <p className="text-center text-sm text-muted-foreground mt-2">{progress}%</p>
                 </div>
               </div>
-            </div>}
+            </div>
+          )}
 
-          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && <ManualEditor originalImage={originalImage} imageElement={imageElement} onProcessed={handleManualProcessed} />}
+          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && (
+            <ManualEditor
+              originalImage={originalImage}
+              imageElement={imageElement}
+              onProcessed={handleManualProcessed}
+            />
+          )}
 
-          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && !isUpscaling && <div className="space-y-6">
-              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onCopy={handleCopy} onStartCrop={handleStartCrop} onUpscale={handleUpscale} isUpscaling={isUpscaling} />
+          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && !isUpscaling && (
+            <div className="space-y-6">
+              <ImageComparison
+                originalImage={originalImage}
+                processedImage={processedImage}
+                onDownload={handleDownload}
+                onCopy={handleCopy}
+                onStartCrop={handleStartCrop}
+                onUpscale={handleUpscale}
+                isUpscaling={isUpscaling}
+              />
               <div className="flex justify-center">
-                <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                >
                   Upload another image
                 </button>
               </div>
-            </div>}
+            </div>
+          )}
 
-          {processedImage && !isProcessing && !isCropping && hasCropped && <div className="space-y-6 animate-fade-in">
+          {processedImage && !isProcessing && !isCropping && hasCropped && (
+            <div className="space-y-6 animate-fade-in">
               <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
                 <img src={processedImage} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
@@ -267,27 +285,40 @@ Upload your photo and get professional results in seconds.</p>
                   <Copy className="w-5 h-5 mr-2" />
                   Copy to Clipboard
                 </Button>
-                <Button onClick={handleDownload} size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft">
+                <Button
+                  onClick={handleDownload}
+                  size="lg"
+                  className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+                >
                   <Download className="w-5 h-5 mr-2" />
                   Download HD Image
                 </Button>
               </div>
               <div className="flex justify-center">
-                <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                >
                   Upload another image
                 </button>
               </div>
-            </div>}
+            </div>
+          )}
 
-          {isCropping && processedImage && <CropEditor imageUrl={processedImage} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />}
+          {isCropping && processedImage && (
+            <CropEditor imageUrl={processedImage} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />
+          )}
         </main>
 
         <footer className="mt-16 text-center text-sm text-muted-foreground">
           <p>
-Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a><br>
-All processing happens in your browser. Your images never leave your device.</p>
+            Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
+            <br />
+            All processing happens in your browser. Your images never leave your device.
+          </p>
         </footer>
       </div>
-    </div>;
+    </div>
+  );
 };
 export default Index;
