@@ -94,15 +94,12 @@ const Index = () => {
       URL.revokeObjectURL(url);
     }
   };
-
   const handleCopy = async () => {
     if (processedBlob) {
       try {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            [processedBlob.type]: processedBlob
-          })
-        ]);
+        await navigator.clipboard.write([new ClipboardItem({
+          [processedBlob.type]: processedBlob
+        })]);
         toast({
           title: "Copied!",
           description: "Image copied to clipboard"
@@ -117,19 +114,17 @@ const Index = () => {
       }
     }
   };
-
   const handleUpscale = async () => {
     if (!processedImage) return;
-    
     try {
       setIsUpscaling(true);
       setProgress(0);
-      
-      const { blob, url } = await upscaleImage(processedImage, setProgress);
-      
+      const {
+        blob,
+        url
+      } = await upscaleImage(processedImage, setProgress);
       setProcessedImage(url);
       setProcessedBlob(blob);
-      
       toast({
         title: "Success!",
         description: "Image upscaled to 2x resolution"
@@ -226,8 +221,7 @@ Upload your photo and get professional results in seconds.</p>
 
           {isProcessing && <ProcessingIndicator progress={progress} />}
           
-          {isUpscaling && (
-            <div className="space-y-4 animate-fade-in">
+          {isUpscaling && <div className="space-y-4 animate-fade-in">
               <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
                 <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
                   <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
@@ -247,21 +241,12 @@ Upload your photo and get professional results in seconds.</p>
                   </p>
                 </div>
               </div>
-            </div>
-          )}
+            </div>}
 
           {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && <ManualEditor originalImage={originalImage} imageElement={imageElement} onProcessed={handleManualProcessed} />}
 
           {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && !isUpscaling && <div className="space-y-6">
-              <ImageComparison 
-                originalImage={originalImage} 
-                processedImage={processedImage} 
-                onDownload={handleDownload} 
-                onCopy={handleCopy} 
-                onStartCrop={handleStartCrop}
-                onUpscale={handleUpscale}
-                isUpscaling={isUpscaling}
-              />
+              <ImageComparison originalImage={originalImage} processedImage={processedImage} onDownload={handleDownload} onCopy={handleCopy} onStartCrop={handleStartCrop} onUpscale={handleUpscale} isUpscaling={isUpscaling} />
               <div className="flex justify-center">
                 <button onClick={handleReset} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline">
                   Upload another image
@@ -298,7 +283,8 @@ Upload your photo and get professional results in seconds.</p>
         </main>
 
         <footer className="mt-16 text-center text-sm text-muted-foreground">
-          <p>All processing happens in your browser. Your images never leave your device.</p>
+          <p>
+All processing happens in your browser. Your images never leave your device.</p>
         </footer>
       </div>
     </div>;
