@@ -227,8 +227,6 @@ const Index = () => {
     return () => document.removeEventListener("paste", handlePaste);
   }, [mode, isProcessing]);
 
-  const showDropOverlay = isDraggingOver && (originalImage || processedImage);
-
   return (
     <div
       className="min-h-screen bg-gradient-bg relative"
@@ -236,14 +234,6 @@ const Index = () => {
       onDragOver={handleGlobalDragOver}
       onDragLeave={handleGlobalDragLeave}
     >
-      {/* Drop overlay for result screen */}
-      {showDropOverlay && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
-          <div className="border-4 border-dashed border-primary rounded-2xl p-12 bg-card/90 shadow-strong animate-pulse">
-            <p className="text-2xl font-semibold text-primary">Drop image to process</p>
-          </div>
-        </div>
-      )}
       <div className="container mx-auto px-4 py-12">
         <div className="absolute top-4 right-4">
           <ThemeToggle />
