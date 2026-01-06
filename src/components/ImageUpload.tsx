@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import heic2any from 'heic2any';
+import { isHeicFile, convertHeicToJpeg } from '@/utils/heicConverter';
 
 interface ImageUploadProps {
   onImageSelect: (file: File) => void;
@@ -12,40 +12,17 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
   const { toast } = useToast();
   const [isConverting, setIsConverting] = useState(false);
 
-  const isHeicFile = (file: File): boolean => {
-    return (
-      file.type === 'image/heic' ||
-      file.type === 'image/heif' ||
-      file.name.toLowerCase().endsWith('.heic') ||
-      file.name.toLowerCase().endsWith('.heif')
-    );
-  };
-
-  const convertHeicToJpeg = async (file: File): Promise<File> => {
-    try {
-      setIsConverting(true);
-      const convertedBlob = await heic2any({
-        blob: file,
-        toType: 'image/jpeg',
-        quality: 0.9,
-      });
-      const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-      const newFileName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
-      return new File([blob], newFileName, { type: 'image/jpeg' });
-    } finally {
-      setIsConverting(false);
-    }
-  };
-
   const processFile = useCallback(
     async (file: File) => {
       try {
         if (isHeicFile(file)) {
+          setIsConverting(true);
           toast({
             title: 'Converting HEIC...',
             description: 'Please wait while we convert your image',
           });
           const convertedFile = await convertHeicToJpeg(file);
+          setIsConverting(false);
           onImageSelect(convertedFile);
         } else if (file.type.startsWith('image/')) {
           onImageSelect(file);
