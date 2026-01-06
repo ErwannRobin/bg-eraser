@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { ImageComparison } from "@/components/ImageComparison";
 import { ProcessingIndicator } from "@/components/ProcessingIndicator";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { upscaleImage } from "@/utils/imageUpscale";
+import { isHeicFile, convertHeicToJpeg } from "@/utils/heicConverter";
 import { useToast } from "@/hooks/use-toast";
 import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +24,67 @@ const Index = () => {
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
   const [isUpscaling, setIsUpscaling] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const { toast } = useToast();
+
+  const processFile = useCallback(async (file: File) => {
+    try {
+      let fileToProcess = file;
+      if (isHeicFile(file)) {
+        toast({
+          title: 'Converting HEIC...',
+          description: 'Please wait while we convert your image',
+        });
+        fileToProcess = await convertHeicToJpeg(file);
+      }
+      await handleImageSelect(fileToProcess);
+    } catch (error) {
+      console.error('Error processing file:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process image file',
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
+
+  const handleGlobalDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingOver(false);
+
+      if (isProcessing || isUpscaling) return;
+
+      const files = Array.from(e.dataTransfer.files);
+      const imageFile = files.find(
+        (file) => file.type.startsWith('image/') || isHeicFile(file)
+      );
+
+      if (imageFile) {
+        // Reset state for new image
+        setHasCropped(false);
+        setIsCropping(false);
+        processFile(imageFile);
+      }
+    },
+    [isProcessing, isUpscaling, processFile]
+  );
+
+  const handleGlobalDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  }, []);
+
+  const handleGlobalDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're leaving the container entirely
+    if (e.currentTarget === e.target) {
+      setIsDraggingOver(false);
+    }
+  }, []);
   const handleImageSelect = async (file: File) => {
     try {
       // Load and display original image
@@ -165,8 +226,24 @@ const Index = () => {
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
   }, [mode, isProcessing]);
+
+  const showDropOverlay = isDraggingOver && (originalImage || processedImage);
+
   return (
-    <div className="min-h-screen bg-gradient-bg">
+    <div
+      className="min-h-screen bg-gradient-bg relative"
+      onDrop={handleGlobalDrop}
+      onDragOver={handleGlobalDragOver}
+      onDragLeave={handleGlobalDragLeave}
+    >
+      {/* Drop overlay for result screen */}
+      {showDropOverlay && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
+          <div className="border-4 border-dashed border-primary rounded-2xl p-12 bg-card/90 shadow-strong animate-pulse">
+            <p className="text-2xl font-semibold text-primary">Drop image to process</p>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4 py-12">
         <div className="absolute top-4 right-4">
           <ThemeToggle />
