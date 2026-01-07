@@ -12,7 +12,7 @@ import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { upscaleImage } from "@/utils/imageUpscale";
 import { isHeicFile, convertHeicToJpeg } from "@/utils/heicConverter";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2, X, Archive } from "lucide-react";
+import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2, Archive } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import JSZip from "jszip";
 
@@ -25,74 +25,82 @@ const Index = () => {
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
   const [isUpscaling, setIsUpscaling] = useState(false);
-  const processingQueue = useRef<string[]>([]);
+  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  const processingQueueRef = useRef<string[]>([]);
+  const isProcessingRef = useRef(false);
   const { toast } = useToast();
 
   const selectedImage = images.find((img) => img.id === selectedImageId) || null;
+  const hasMultipleImages = images.length > 1;
 
+  // Process next image in queue
   const processNextInQueue = useCallback(async () => {
-    if (processingQueue.current.length === 0 || isProcessing) return;
+    if (processingQueueRef.current.length === 0 || isProcessingRef.current) return;
 
-    const nextId = processingQueue.current[0];
-    const imageToProcess = images.find((img) => img.id === nextId);
+    const nextId = processingQueueRef.current[0];
     
-    if (!imageToProcess || imageToProcess.status !== 'pending') {
-      processingQueue.current.shift();
-      processNextInQueue();
-      return;
-    }
+    // Get current image from state
+    setImages((currentImages) => {
+      const imageToProcess = currentImages.find((img) => img.id === nextId);
+      
+      if (!imageToProcess || imageToProcess.status !== 'pending') {
+        processingQueueRef.current.shift();
+        // Schedule next processing
+        setTimeout(() => processNextInQueue(), 0);
+        return currentImages;
+      }
 
-    setIsProcessing(true);
-    setProgress(0);
+      // Start processing
+      isProcessingRef.current = true;
+      setIsProcessing(true);
+      setProgress(0);
 
-    // Update status to processing
-    setImages((prev) =>
-      prev.map((img) =>
+      // Process asynchronously
+      (async () => {
+        try {
+          const imgElement = await loadImage(imageToProcess.originalFile);
+          const resultBlob = await removeBackground(imgElement, setProgress);
+          const resultUrl = URL.createObjectURL(resultBlob);
+
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === nextId
+                ? { ...img, processedUrl: resultUrl, processedBlob: resultBlob, status: 'done' as const }
+                : img
+            )
+          );
+
+          toast({
+            title: "Success!",
+            description: `Background removed successfully`,
+          });
+        } catch (error) {
+          console.error("Error processing image:", error);
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === nextId ? { ...img, status: 'error' as const } : img
+            )
+          );
+          toast({
+            title: "Error",
+            description: "Failed to remove background. Please try again.",
+            variant: "destructive",
+          });
+        } finally {
+          processingQueueRef.current.shift();
+          isProcessingRef.current = false;
+          setIsProcessing(false);
+          // Process next in queue
+          setTimeout(() => processNextInQueue(), 0);
+        }
+      })();
+
+      // Update status to processing
+      return currentImages.map((img) =>
         img.id === nextId ? { ...img, status: 'processing' as const } : img
-      )
-    );
-
-    try {
-      const imgElement = await loadImage(imageToProcess.originalFile);
-      const resultBlob = await removeBackground(imgElement, setProgress);
-      const resultUrl = URL.createObjectURL(resultBlob);
-
-      setImages((prev) =>
-        prev.map((img) =>
-          img.id === nextId
-            ? { ...img, processedUrl: resultUrl, processedBlob: resultBlob, status: 'done' as const }
-            : img
-        )
       );
-
-      toast({
-        title: "Success!",
-        description: `Background removed from ${imageToProcess.originalFile.name}`,
-      });
-    } catch (error) {
-      console.error("Error processing image:", error);
-      setImages((prev) =>
-        prev.map((img) =>
-          img.id === nextId ? { ...img, status: 'error' as const } : img
-        )
-      );
-      toast({
-        title: "Error",
-        description: `Failed to process ${imageToProcess.originalFile.name}`,
-        variant: "destructive",
-      });
-    }
-
-    processingQueue.current.shift();
-    setIsProcessing(false);
-  }, [images, isProcessing, toast]);
-
-  // Process queue effect
-  useEffect(() => {
-    if (processingQueue.current.length > 0 && !isProcessing) {
-      processNextInQueue();
-    }
-  }, [images, isProcessing, processNextInQueue]);
+    });
+  }, [toast]);
 
   const handleFilesSelect = useCallback(
     async (files: File[]) => {
@@ -110,17 +118,18 @@ const Index = () => {
       // Select the first new image
       if (newImages.length > 0) {
         setSelectedImageId(newImages[0].id);
+        
+        // Load image element for the first image
+        loadImage(newImages[0].originalFile).then(setImageElement);
       }
 
       // Add to processing queue for AI mode
       if (mode === "ai") {
-        processingQueue.current.push(...newImages.map((img) => img.id));
-        if (!isProcessing) {
-          processNextInQueue();
-        }
+        processingQueueRef.current.push(...newImages.map((img) => img.id));
+        processNextInQueue();
       }
     },
-    [mode, isProcessing, processNextInQueue]
+    [mode, processNextInQueue]
   );
 
   const handleGlobalDrop = useCallback(
@@ -128,7 +137,7 @@ const Index = () => {
       e.preventDefault();
       e.stopPropagation();
 
-      if (isProcessing || isUpscaling) return;
+      if (isProcessingRef.current || isUpscaling) return;
 
       const files = Array.from(e.dataTransfer.files);
       const imageFiles = files.filter(
@@ -156,7 +165,7 @@ const Index = () => {
       setIsCropping(false);
       handleFilesSelect(processedFiles);
     },
-    [isProcessing, isUpscaling, handleFilesSelect]
+    [isUpscaling, handleFilesSelect]
   );
 
   const handleGlobalDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -210,7 +219,7 @@ const Index = () => {
       const url = URL.createObjectURL(selectedImage.processedBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `removed-bg-${selectedImage.originalFile.name.split('.')[0]}.png`;
+      a.download = `removed-bg-${Date.now()}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -306,24 +315,10 @@ const Index = () => {
     });
     setImages([]);
     setSelectedImageId(null);
+    setImageElement(null);
     setProgress(0);
     setHasCropped(false);
-    processingQueue.current = [];
-  };
-
-  const handleRemoveImage = (id: string) => {
-    const img = images.find((i) => i.id === id);
-    if (img) {
-      URL.revokeObjectURL(img.originalUrl);
-      if (img.processedUrl) URL.revokeObjectURL(img.processedUrl);
-    }
-    setImages((prev) => prev.filter((i) => i.id !== id));
-    processingQueue.current = processingQueue.current.filter((qId) => qId !== id);
-    
-    if (selectedImageId === id) {
-      const remaining = images.filter((i) => i.id !== id);
-      setSelectedImageId(remaining.length > 0 ? remaining[0].id : null);
-    }
+    processingQueueRef.current = [];
   };
 
   // Handle paste events for image pasting
@@ -351,17 +346,15 @@ const Index = () => {
     return () => document.removeEventListener("paste", handlePaste);
   }, [handleFilesSelect]);
 
-  const hasImages = images.length > 0;
-  const doneCount = images.filter((img) => img.status === 'done').length;
-  const currentProcessingImage = images.find((img) => img.status === 'processing');
-
-  // Get image element for manual editor
-  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  // Update imageElement when selecting a different image
   useEffect(() => {
-    if (selectedImage && mode === 'manual' && !selectedImage.processedUrl) {
+    if (selectedImage) {
       loadImage(selectedImage.originalFile).then(setImageElement);
     }
-  }, [selectedImage, mode]);
+  }, [selectedImageId]);
+
+  const hasImages = images.length > 0;
+  const doneCount = images.filter((img) => img.status === 'done').length;
 
   return (
     <div
@@ -370,28 +363,28 @@ const Index = () => {
       onDragOver={handleGlobalDragOver}
       onDragLeave={handleGlobalDragLeave}
     >
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
-      </div>
+      <div className="container mx-auto px-4 py-12">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
 
-      {!hasImages ? (
-        <div className="container mx-auto px-4 py-12">
-          <header className="text-center mb-12 animate-fade-in">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
-                <Wand2 className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                BG Eraser
-              </h1>
+        <header className="text-center mb-12 animate-fade-in">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
+              <Wand2 className="w-6 h-6 text-primary-foreground" />
             </div>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Remove image backgrounds instantly with AI-powered precision. Upload your photos and get professional results
-              in seconds.
-            </p>
-          </header>
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              BG Eraser
+            </h1>
+          </div>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
+            in seconds.
+          </p>
+        </header>
 
-          <main className="max-w-4xl mx-auto">
+        <main className="max-w-4xl mx-auto">
+          {!hasImages && !isProcessing && (
             <div className="animate-fade-in space-y-6">
               <Tabs value={mode} onValueChange={(v) => setMode(v as "ai" | "manual")} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
@@ -407,7 +400,7 @@ const Index = () => {
                 <TabsContent value="ai" className="mt-6">
                   <div className="text-center mb-4">
                     <p className="text-sm text-muted-foreground">
-                      Upload images and let AI automatically detect and remove the background
+                      Upload an image and let AI automatically detect and remove the background
                     </p>
                   </div>
                 </TabsContent>
@@ -422,90 +415,76 @@ const Index = () => {
 
               <ImageUpload onImageSelect={handleFilesSelect} isProcessing={isProcessing} multiple={mode === "ai"} />
             </div>
-          </main>
+          )}
 
-          <footer className="mt-16 text-center text-sm text-muted-foreground">
-            <p>
-              Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
-              <br />
-              All processing happens in your browser. Your images never leave your device.
-            </p>
-          </footer>
-        </div>
-      ) : (
-        <div className="flex h-screen">
-          {/* Left sidebar with thumbnails */}
-          <div className="w-24 md:w-32 bg-card border-r border-border flex flex-col">
-            <div className="p-2 border-b border-border">
-              <p className="text-xs text-muted-foreground text-center">
-                {doneCount}/{images.length} done
-              </p>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <ImageThumbnailList
-                images={images}
-                selectedId={selectedImageId}
-                onSelect={setSelectedImageId}
-              />
-            </div>
-            <div className="p-2 border-t border-border space-y-2">
-              {doneCount > 1 && (
-                <Button
-                  onClick={handleDownloadAll}
-                  size="sm"
-                  variant="outline"
-                  className="w-full text-xs"
-                >
-                  <Archive className="w-3 h-3 mr-1" />
-                  ZIP All
-                </Button>
-              )}
-              <Button
-                onClick={handleReset}
-                size="sm"
-                variant="ghost"
-                className="w-full text-xs text-muted-foreground"
-              >
-                <X className="w-3 h-3 mr-1" />
-                Clear
-              </Button>
-            </div>
-          </div>
+          {/* Processing indicator */}
+          {selectedImage?.status === 'processing' && <ProcessingIndicator progress={progress} />}
 
-          {/* Main content area */}
-          <div className="flex-1 overflow-auto p-4 md:p-8">
-            {currentProcessingImage && currentProcessingImage.id === selectedImageId && (
-              <ProcessingIndicator progress={progress} />
-            )}
-
-            {isUpscaling && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
-                  <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
-                    <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
-                  </div>
-                  <div className="text-center space-y-2">
-                    <p className="text-lg font-semibold text-foreground">Upscaling image...</p>
-                    <p className="text-sm text-muted-foreground">Enhancing resolution to 2x</p>
-                  </div>
-                  <div className="w-full max-w-xs">
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-center text-sm text-muted-foreground mt-2">{progress}%</p>
-                  </div>
+          {isUpscaling && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
+                <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
+                  <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-lg font-semibold text-foreground">Upscaling image...</p>
+                  <p className="text-sm text-muted-foreground">Enhancing resolution to 2x</p>
+                </div>
+                <div className="w-full max-w-xs">
+                  <Progress value={progress} className="h-2" />
+                  <p className="text-center text-sm text-muted-foreground mt-2">{progress}%</p>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {selectedImage && mode === "manual" && !selectedImage.processedUrl && imageElement && !isProcessing && (
-              <ManualEditor
-                originalImage={selectedImage.originalUrl}
-                imageElement={imageElement}
-                onProcessed={handleManualProcessed}
-              />
-            )}
+          {selectedImage && mode === "manual" && !selectedImage.processedUrl && imageElement && !isProcessing && (
+            <ManualEditor
+              originalImage={selectedImage.originalUrl}
+              imageElement={imageElement}
+              onProcessed={handleManualProcessed}
+            />
+          )}
 
-            {selectedImage && selectedImage.processedUrl && !isProcessing && !isCropping && !hasCropped && !isUpscaling && selectedImage.status === 'done' && (
-              <div className="space-y-6">
+          {selectedImage && selectedImage.processedUrl && selectedImage.status === 'done' && !isProcessing && !isCropping && !hasCropped && !isUpscaling && (
+            <div className="space-y-6">
+              {/* Thumbnail sidebar for multiple images */}
+              {hasMultipleImages && (
+                <div className="flex gap-4">
+                  <div className="w-20 flex-shrink-0 space-y-2">
+                    <ImageThumbnailList
+                      images={images}
+                      selectedId={selectedImageId}
+                      onSelect={setSelectedImageId}
+                    />
+                    {doneCount > 1 && (
+                      <Button
+                        onClick={handleDownloadAll}
+                        size="sm"
+                        variant="outline"
+                        className="w-full text-xs"
+                      >
+                        <Archive className="w-3 h-3 mr-1" />
+                        ZIP
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <ImageComparison
+                      originalImage={selectedImage.originalUrl}
+                      processedImage={selectedImage.processedUrl}
+                      onDownload={handleDownload}
+                      onCopy={handleCopy}
+                      onStartCrop={handleStartCrop}
+                      onUpscale={handleUpscale}
+                      isUpscaling={isUpscaling}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Single image - original layout */}
+              {!hasMultipleImages && (
                 <ImageComparison
                   originalImage={selectedImage.originalUrl}
                   processedImage={selectedImage.processedUrl}
@@ -515,65 +494,66 @@ const Index = () => {
                   onUpscale={handleUpscale}
                   isUpscaling={isUpscaling}
                 />
-              </div>
-            )}
+              )}
 
-            {selectedImage && selectedImage.status === 'processing' && (
-              <ProcessingIndicator progress={progress} />
-            )}
-
-            {selectedImage && selectedImage.status === 'pending' && (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <p>Waiting in queue...</p>
-              </div>
-            )}
-
-            {selectedImage && selectedImage.status === 'error' && (
-              <div className="flex flex-col items-center justify-center h-full text-destructive">
-                <p>Failed to process this image</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => handleRemoveImage(selectedImage.id)}
+              <div className="flex justify-center">
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
                 >
-                  Remove
+                  Upload another image
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectedImage && selectedImage.processedUrl && hasCropped && !isCropping && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
+                <img src={selectedImage.processedUrl} alt="Cropped result" className="w-full h-full object-contain" />
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
+                  <Maximize2 className="w-5 h-5 mr-2" />
+                  Upscale 2x
+                </Button>
+                <Button onClick={handleCopy} size="lg" variant="outline">
+                  <Copy className="w-5 h-5 mr-2" />
+                  Copy to Clipboard
+                </Button>
+                <Button
+                  onClick={handleDownload}
+                  size="lg"
+                  className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+                >
+                  <Download className="w-5 h-5 mr-2" />
+                  Download HD Image
                 </Button>
               </div>
-            )}
-
-            {selectedImage && selectedImage.processedUrl && hasCropped && !isCropping && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
-                  <img src={selectedImage.processedUrl} alt="Cropped result" className="w-full h-full object-contain" />
-                </div>
-                <div className="flex flex-wrap justify-center gap-3">
-                  <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
-                    <Maximize2 className="w-5 h-5 mr-2" />
-                    Upscale 2x
-                  </Button>
-                  <Button onClick={handleCopy} size="lg" variant="outline">
-                    <Copy className="w-5 h-5 mr-2" />
-                    Copy to Clipboard
-                  </Button>
-                  <Button
-                    onClick={handleDownload}
-                    size="lg"
-                    className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
-                  >
-                    <Download className="w-5 h-5 mr-2" />
-                    Download HD Image
-                  </Button>
-                </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                >
+                  Upload another image
+                </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {isCropping && selectedImage?.processedUrl && (
-              <CropEditor imageUrl={selectedImage.processedUrl} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />
-            )}
-          </div>
-        </div>
-      )}
+          {isCropping && selectedImage?.processedUrl && (
+            <CropEditor imageUrl={selectedImage.processedUrl} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />
+          )}
+        </main>
+
+        <footer className="mt-16 text-center text-sm text-muted-foreground">
+          <p>
+            Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
+            <br />
+            All processing happens in your browser. Your images never leave your device.
+          </p>
+        </footer>
+      </div>
     </div>
   );
 };
