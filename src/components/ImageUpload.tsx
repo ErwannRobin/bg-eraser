@@ -4,40 +4,54 @@ import { useToast } from '@/hooks/use-toast';
 import { isHeicFile, convertHeicToJpeg } from '@/utils/heicConverter';
 
 interface ImageUploadProps {
-  onImageSelect: (file: File) => void;
+  onImageSelect: (files: File[]) => void;
   isProcessing: boolean;
+  multiple?: boolean;
 }
 
-export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) => {
+export const ImageUpload = ({ onImageSelect, isProcessing, multiple = false }: ImageUploadProps) => {
   const { toast } = useToast();
   const [isConverting, setIsConverting] = useState(false);
 
-  const processFile = useCallback(
-    async (file: File) => {
+  const processFiles = useCallback(
+    async (files: File[]) => {
+      const imageFiles = files.filter(
+        (file) => file.type.startsWith('image/') || isHeicFile(file)
+      );
+
+      if (imageFiles.length === 0) {
+        toast({
+          title: 'Invalid files',
+          description: 'Please upload image files',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       try {
-        if (isHeicFile(file)) {
-          setIsConverting(true);
-          toast({
-            title: 'Converting HEIC...',
-            description: 'Please wait while we convert your image',
-          });
-          const convertedFile = await convertHeicToJpeg(file);
-          setIsConverting(false);
-          onImageSelect(convertedFile);
-        } else if (file.type.startsWith('image/')) {
-          onImageSelect(file);
-        } else {
-          toast({
-            title: 'Invalid file',
-            description: 'Please upload an image file',
-            variant: 'destructive',
-          });
+        setIsConverting(true);
+        const processedFiles: File[] = [];
+
+        for (const file of imageFiles) {
+          if (isHeicFile(file)) {
+            toast({
+              title: 'Converting HEIC...',
+              description: `Converting ${file.name}`,
+            });
+            const convertedFile = await convertHeicToJpeg(file);
+            processedFiles.push(convertedFile);
+          } else {
+            processedFiles.push(file);
+          }
         }
+
+        setIsConverting(false);
+        onImageSelect(processedFiles);
       } catch (error) {
-        console.error('Error processing file:', error);
+        console.error('Error processing files:', error);
         toast({
           title: 'Conversion failed',
-          description: 'Failed to convert HEIC image. Please try a different format.',
+          description: 'Failed to convert some HEIC images.',
           variant: 'destructive',
         });
         setIsConverting(false);
@@ -54,12 +68,12 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
       if (isProcessing || isConverting) return;
 
       const files = Array.from(e.dataTransfer.files);
-      const imageFile = files.find(
+      const imageFiles = files.filter(
         (file) => file.type.startsWith('image/') || isHeicFile(file)
       );
 
-      if (imageFile) {
-        processFile(imageFile);
+      if (imageFiles.length > 0) {
+        processFiles(multiple ? imageFiles : [imageFiles[0]]);
       } else {
         toast({
           title: 'Invalid file',
@@ -68,7 +82,7 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
         });
       }
     },
-    [processFile, isProcessing, isConverting, toast]
+    [processFiles, isProcessing, isConverting, toast, multiple]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -78,12 +92,12 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        processFile(file);
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        processFiles(files);
       }
     },
-    [processFile]
+    [processFiles]
   );
 
   const isDisabled = isProcessing || isConverting;
@@ -97,6 +111,7 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
       <input
         type="file"
         accept="image/*,.heic,.heif"
+        multiple={multiple}
         onChange={handleFileInput}
         disabled={isDisabled}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
@@ -111,10 +126,10 @@ export const ImageUpload = ({ onImageSelect, isProcessing }: ImageUploadProps) =
         </div>
         <div>
           <p className="text-lg font-semibold text-foreground mb-1">
-            {isConverting ? 'Converting HEIC...' : 'Drop your image here'}
+            {isConverting ? 'Converting HEIC...' : multiple ? 'Drop your images here' : 'Drop your image here'}
           </p>
           <p className="text-sm text-muted-foreground">
-            or click to browse, or paste (Ctrl+V) • PNG, JPG, WEBP, HEIC
+            or click to browse, or paste (Ctrl+V) • PNG, JPG, WEBP, HEIC{multiple ? ' • Multiple files supported' : ''}
           </p>
         </div>
       </div>

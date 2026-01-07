@@ -1,136 +1,198 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { ImageComparison } from "@/components/ImageComparison";
 import { ProcessingIndicator } from "@/components/ProcessingIndicator";
 import { ManualEditor } from "@/components/ManualEditor";
 import { CropEditor } from "@/components/CropEditor";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ImageThumbnailList, ProcessedImageItem } from "@/components/ImageThumbnailList";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { removeBackground, loadImage } from "@/utils/backgroundRemoval";
 import { upscaleImage } from "@/utils/imageUpscale";
 import { isHeicFile, convertHeicToJpeg } from "@/utils/heicConverter";
 import { useToast } from "@/hooks/use-toast";
-import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2 } from "lucide-react";
+import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2, X, Archive } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import JSZip from "jszip";
+
 const Index = () => {
-  const [originalImage, setOriginalImage] = useState<string | null>(null);
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const [images, setImages] = useState<ProcessedImageItem[]>([]);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
-  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [isCropping, setIsCropping] = useState(false);
   const [hasCropped, setHasCropped] = useState(false);
   const [isUpscaling, setIsUpscaling] = useState(false);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const processingQueue = useRef<string[]>([]);
   const { toast } = useToast();
 
-  const processFile = useCallback(async (file: File) => {
+  const selectedImage = images.find((img) => img.id === selectedImageId) || null;
+
+  const processNextInQueue = useCallback(async () => {
+    if (processingQueue.current.length === 0 || isProcessing) return;
+
+    const nextId = processingQueue.current[0];
+    const imageToProcess = images.find((img) => img.id === nextId);
+    
+    if (!imageToProcess || imageToProcess.status !== 'pending') {
+      processingQueue.current.shift();
+      processNextInQueue();
+      return;
+    }
+
+    setIsProcessing(true);
+    setProgress(0);
+
+    // Update status to processing
+    setImages((prev) =>
+      prev.map((img) =>
+        img.id === nextId ? { ...img, status: 'processing' as const } : img
+      )
+    );
+
     try {
-      let fileToProcess = file;
-      if (isHeicFile(file)) {
-        toast({
-          title: 'Converting HEIC...',
-          description: 'Please wait while we convert your image',
-        });
-        fileToProcess = await convertHeicToJpeg(file);
-      }
-      await handleImageSelect(fileToProcess);
-    } catch (error) {
-      console.error('Error processing file:', error);
+      const imgElement = await loadImage(imageToProcess.originalFile);
+      const resultBlob = await removeBackground(imgElement, setProgress);
+      const resultUrl = URL.createObjectURL(resultBlob);
+
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === nextId
+            ? { ...img, processedUrl: resultUrl, processedBlob: resultBlob, status: 'done' as const }
+            : img
+        )
+      );
+
       toast({
-        title: 'Error',
-        description: 'Failed to process image file',
-        variant: 'destructive',
+        title: "Success!",
+        description: `Background removed from ${imageToProcess.originalFile.name}`,
+      });
+    } catch (error) {
+      console.error("Error processing image:", error);
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === nextId ? { ...img, status: 'error' as const } : img
+        )
+      );
+      toast({
+        title: "Error",
+        description: `Failed to process ${imageToProcess.originalFile.name}`,
+        variant: "destructive",
       });
     }
-  }, [toast]);
+
+    processingQueue.current.shift();
+    setIsProcessing(false);
+  }, [images, isProcessing, toast]);
+
+  // Process queue effect
+  useEffect(() => {
+    if (processingQueue.current.length > 0 && !isProcessing) {
+      processNextInQueue();
+    }
+  }, [images, isProcessing, processNextInQueue]);
+
+  const handleFilesSelect = useCallback(
+    async (files: File[]) => {
+      const newImages: ProcessedImageItem[] = files.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        originalFile: file,
+        originalUrl: URL.createObjectURL(file),
+        processedUrl: null,
+        processedBlob: null,
+        status: mode === "ai" ? 'pending' as const : 'done' as const,
+      }));
+
+      setImages((prev) => [...prev, ...newImages]);
+      
+      // Select the first new image
+      if (newImages.length > 0) {
+        setSelectedImageId(newImages[0].id);
+      }
+
+      // Add to processing queue for AI mode
+      if (mode === "ai") {
+        processingQueue.current.push(...newImages.map((img) => img.id));
+        if (!isProcessing) {
+          processNextInQueue();
+        }
+      }
+    },
+    [mode, isProcessing, processNextInQueue]
+  );
 
   const handleGlobalDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
+    async (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
-      setIsDraggingOver(false);
 
       if (isProcessing || isUpscaling) return;
 
       const files = Array.from(e.dataTransfer.files);
-      const imageFile = files.find(
+      const imageFiles = files.filter(
         (file) => file.type.startsWith('image/') || isHeicFile(file)
       );
 
-      if (imageFile) {
-        // Reset state for new image
-        setHasCropped(false);
-        setIsCropping(false);
-        processFile(imageFile);
+      if (imageFiles.length === 0) return;
+
+      // Convert HEIC files if needed
+      const processedFiles: File[] = [];
+      for (const file of imageFiles) {
+        if (isHeicFile(file)) {
+          try {
+            const converted = await convertHeicToJpeg(file);
+            processedFiles.push(converted);
+          } catch {
+            processedFiles.push(file);
+          }
+        } else {
+          processedFiles.push(file);
+        }
       }
+
+      setHasCropped(false);
+      setIsCropping(false);
+      handleFilesSelect(processedFiles);
     },
-    [isProcessing, isUpscaling, processFile]
+    [isProcessing, isUpscaling, handleFilesSelect]
   );
 
   const handleGlobalDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(true);
   }, []);
 
   const handleGlobalDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set to false if we're leaving the container entirely
-    if (e.currentTarget === e.target) {
-      setIsDraggingOver(false);
-    }
   }, []);
-  const handleImageSelect = async (file: File) => {
-    try {
-      // Load and display original image
-      const imgElement = await loadImage(file);
-      const originalUrl = URL.createObjectURL(file);
-      setOriginalImage(originalUrl);
-      setImageElement(imgElement);
-      setProcessedImage(null);
-      setProcessedBlob(null);
 
-      // If AI mode, process immediately
-      if (mode === "ai") {
-        setIsProcessing(true);
-        setProgress(0);
-
-        // Remove background with AI
-        const resultBlob = await removeBackground(imgElement, setProgress);
-        const resultUrl = URL.createObjectURL(resultBlob);
-        setProcessedImage(resultUrl);
-        setProcessedBlob(resultBlob);
-        toast({
-          title: "Success!",
-          description: "Background removed successfully",
-        });
-        setIsProcessing(false);
-      }
-    } catch (error) {
-      console.error("Error processing image:", error);
-      toast({
-        title: "Error",
-        description: "Failed to remove background. Please try again.",
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-    }
-  };
   const handleManualProcessed = (blob: Blob, url: string) => {
-    setProcessedImage(url);
-    setProcessedBlob(blob);
+    if (!selectedImageId) return;
+    setImages((prev) =>
+      prev.map((img) =>
+        img.id === selectedImageId
+          ? { ...img, processedUrl: url, processedBlob: blob, status: 'done' as const }
+          : img
+      )
+    );
   };
+
   const handleStartCrop = () => {
     setIsCropping(true);
   };
+
   const handleCropApplied = (blob: Blob, url: string) => {
-    setProcessedImage(url);
-    setProcessedBlob(blob);
+    if (!selectedImageId) return;
+    setImages((prev) =>
+      prev.map((img) =>
+        img.id === selectedImageId
+          ? { ...img, processedUrl: url, processedBlob: blob }
+          : img
+      )
+    );
     setIsCropping(false);
     setHasCropped(true);
     toast({
@@ -138,27 +200,58 @@ const Index = () => {
       description: "Image cropped successfully",
     });
   };
+
   const handleCropCancel = () => {
     setIsCropping(false);
   };
+
   const handleDownload = () => {
-    if (processedBlob) {
-      const url = URL.createObjectURL(processedBlob);
+    if (selectedImage?.processedBlob) {
+      const url = URL.createObjectURL(selectedImage.processedBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `removed-bg-${Date.now()}.png`;
+      a.download = `removed-bg-${selectedImage.originalFile.name.split('.')[0]}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
   };
+
+  const handleDownloadAll = async () => {
+    const doneImages = images.filter((img) => img.status === 'done' && img.processedBlob);
+    if (doneImages.length === 0) return;
+
+    const zip = new JSZip();
+    doneImages.forEach((img, index) => {
+      if (img.processedBlob) {
+        const name = `removed-bg-${img.originalFile.name.split('.')[0] || index}.png`;
+        zip.file(name, img.processedBlob);
+      }
+    });
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bg-removed-images-${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Downloaded!",
+      description: `${doneImages.length} images saved as ZIP`,
+    });
+  };
+
   const handleCopy = async () => {
-    if (processedBlob) {
+    if (selectedImage?.processedBlob) {
       try {
         await navigator.clipboard.write([
           new ClipboardItem({
-            [processedBlob.type]: processedBlob,
+            [selectedImage.processedBlob.type]: selectedImage.processedBlob,
           }),
         ]);
         toast({
@@ -175,14 +268,20 @@ const Index = () => {
       }
     }
   };
+
   const handleUpscale = async () => {
-    if (!processedImage) return;
+    if (!selectedImage?.processedUrl || !selectedImageId) return;
     try {
       setIsUpscaling(true);
       setProgress(0);
-      const { blob, url } = await upscaleImage(processedImage, setProgress);
-      setProcessedImage(url);
-      setProcessedBlob(blob);
+      const { blob, url } = await upscaleImage(selectedImage.processedUrl, setProgress);
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === selectedImageId
+            ? { ...img, processedUrl: url, processedBlob: blob }
+            : img
+        )
+      );
       toast({
         title: "Success!",
         description: "Image upscaled to 2x resolution",
@@ -198,13 +297,33 @@ const Index = () => {
       setIsUpscaling(false);
     }
   };
+
   const handleReset = () => {
-    setOriginalImage(null);
-    setProcessedImage(null);
-    setProcessedBlob(null);
-    setImageElement(null);
+    // Clean up URLs
+    images.forEach((img) => {
+      URL.revokeObjectURL(img.originalUrl);
+      if (img.processedUrl) URL.revokeObjectURL(img.processedUrl);
+    });
+    setImages([]);
+    setSelectedImageId(null);
     setProgress(0);
     setHasCropped(false);
+    processingQueue.current = [];
+  };
+
+  const handleRemoveImage = (id: string) => {
+    const img = images.find((i) => i.id === id);
+    if (img) {
+      URL.revokeObjectURL(img.originalUrl);
+      if (img.processedUrl) URL.revokeObjectURL(img.processedUrl);
+    }
+    setImages((prev) => prev.filter((i) => i.id !== id));
+    processingQueue.current = processingQueue.current.filter((qId) => qId !== id);
+    
+    if (selectedImageId === id) {
+      const remaining = images.filter((i) => i.id !== id);
+      setSelectedImageId(remaining.length > 0 ? remaining[0].id : null);
+    }
   };
 
   // Handle paste events for image pasting
@@ -212,20 +331,37 @@ const Index = () => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
+      
+      const files: File[] = [];
       for (const item of Array.from(items)) {
         if (item.type.startsWith("image/")) {
           e.preventDefault();
           const file = item.getAsFile();
           if (file) {
-            await handleImageSelect(file);
+            files.push(file);
           }
-          break;
         }
+      }
+      
+      if (files.length > 0) {
+        handleFilesSelect(files);
       }
     };
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [mode, isProcessing]);
+  }, [handleFilesSelect]);
+
+  const hasImages = images.length > 0;
+  const doneCount = images.filter((img) => img.status === 'done').length;
+  const currentProcessingImage = images.find((img) => img.status === 'processing');
+
+  // Get image element for manual editor
+  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (selectedImage && mode === 'manual' && !selectedImage.processedUrl) {
+      loadImage(selectedImage.originalFile).then(setImageElement);
+    }
+  }, [selectedImage, mode]);
 
   return (
     <div
@@ -234,28 +370,28 @@ const Index = () => {
       onDragOver={handleGlobalDragOver}
       onDragLeave={handleGlobalDragLeave}
     >
-      <div className="container mx-auto px-4 py-12">
-        <div className="absolute top-4 right-4">
-          <ThemeToggle />
-        </div>
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
 
-        <header className="text-center mb-12 animate-fade-in">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
-              <Wand2 className="w-6 h-6 text-primary-foreground" />
+      {!hasImages ? (
+        <div className="container mx-auto px-4 py-12">
+          <header className="text-center mb-12 animate-fade-in">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
+                <Wand2 className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                BG Eraser
+              </h1>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              BG Eraser
-            </h1>
-          </div>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
-            in seconds.
-          </p>
-        </header>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Remove image backgrounds instantly with AI-powered precision. Upload your photos and get professional results
+              in seconds.
+            </p>
+          </header>
 
-        <main className="max-w-4xl mx-auto">
-          {!originalImage && !isProcessing && (
+          <main className="max-w-4xl mx-auto">
             <div className="animate-fade-in space-y-6">
               <Tabs value={mode} onValueChange={(v) => setMode(v as "ai" | "manual")} className="w-full">
                 <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
@@ -271,7 +407,7 @@ const Index = () => {
                 <TabsContent value="ai" className="mt-6">
                   <div className="text-center mb-4">
                     <p className="text-sm text-muted-foreground">
-                      Upload an image and let AI automatically detect and remove the background
+                      Upload images and let AI automatically detect and remove the background
                     </p>
                   </div>
                 </TabsContent>
@@ -284,108 +420,162 @@ const Index = () => {
                 </TabsContent>
               </Tabs>
 
-              <ImageUpload onImageSelect={handleImageSelect} isProcessing={isProcessing} />
+              <ImageUpload onImageSelect={handleFilesSelect} isProcessing={isProcessing} multiple={mode === "ai"} />
             </div>
-          )}
+          </main>
 
-          {isProcessing && <ProcessingIndicator progress={progress} />}
-
-          {isUpscaling && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
-                <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
-                  <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
-                </div>
-                <div className="text-center space-y-2">
-                  <p className="text-lg font-semibold text-foreground">Upscaling image...</p>
-                  <p className="text-sm text-muted-foreground">Enhancing resolution to 2x</p>
-                </div>
-                <div className="w-full max-w-xs">
-                  <Progress value={progress} className="h-2" />
-                  <p className="text-center text-sm text-muted-foreground mt-2">{progress}%</p>
-                </div>
-              </div>
+          <footer className="mt-16 text-center text-sm text-muted-foreground">
+            <p>
+              Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
+              <br />
+              All processing happens in your browser. Your images never leave your device.
+            </p>
+          </footer>
+        </div>
+      ) : (
+        <div className="flex h-screen">
+          {/* Left sidebar with thumbnails */}
+          <div className="w-24 md:w-32 bg-card border-r border-border flex flex-col">
+            <div className="p-2 border-b border-border">
+              <p className="text-xs text-muted-foreground text-center">
+                {doneCount}/{images.length} done
+              </p>
             </div>
-          )}
-
-          {originalImage && mode === "manual" && !processedImage && imageElement && !isProcessing && (
-            <ManualEditor
-              originalImage={originalImage}
-              imageElement={imageElement}
-              onProcessed={handleManualProcessed}
-            />
-          )}
-
-          {originalImage && processedImage && !isProcessing && !isCropping && !hasCropped && !isUpscaling && (
-            <div className="space-y-6">
-              <ImageComparison
-                originalImage={originalImage}
-                processedImage={processedImage}
-                onDownload={handleDownload}
-                onCopy={handleCopy}
-                onStartCrop={handleStartCrop}
-                onUpscale={handleUpscale}
-                isUpscaling={isUpscaling}
+            <div className="flex-1 overflow-y-auto">
+              <ImageThumbnailList
+                images={images}
+                selectedId={selectedImageId}
+                onSelect={setSelectedImageId}
               />
-              <div className="flex justify-center">
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-                >
-                  Upload another image
-                </button>
-              </div>
             </div>
-          )}
-
-          {processedImage && !isProcessing && !isCropping && hasCropped && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
-                <img src={processedImage} alt="Cropped result" className="w-full h-full object-contain" />
-              </div>
-              <div className="flex flex-wrap justify-center gap-3">
-                <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
-                  <Maximize2 className="w-5 h-5 mr-2" />
-                  Upscale 2x
-                </Button>
-                <Button onClick={handleCopy} size="lg" variant="outline">
-                  <Copy className="w-5 h-5 mr-2" />
-                  Copy to Clipboard
-                </Button>
+            <div className="p-2 border-t border-border space-y-2">
+              {doneCount > 1 && (
                 <Button
-                  onClick={handleDownload}
-                  size="lg"
-                  className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+                  onClick={handleDownloadAll}
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs"
                 >
-                  <Download className="w-5 h-5 mr-2" />
-                  Download HD Image
+                  <Archive className="w-3 h-3 mr-1" />
+                  ZIP All
+                </Button>
+              )}
+              <Button
+                onClick={handleReset}
+                size="sm"
+                variant="ghost"
+                className="w-full text-xs text-muted-foreground"
+              >
+                <X className="w-3 h-3 mr-1" />
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          {/* Main content area */}
+          <div className="flex-1 overflow-auto p-4 md:p-8">
+            {currentProcessingImage && currentProcessingImage.id === selectedImageId && (
+              <ProcessingIndicator progress={progress} />
+            )}
+
+            {isUpscaling && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="flex flex-col items-center gap-6 p-8 bg-card rounded-lg shadow-soft">
+                  <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center animate-pulse">
+                    <Maximize2 className="w-8 h-8 text-primary-foreground animate-spin" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="text-lg font-semibold text-foreground">Upscaling image...</p>
+                    <p className="text-sm text-muted-foreground">Enhancing resolution to 2x</p>
+                  </div>
+                  <div className="w-full max-w-xs">
+                    <Progress value={progress} className="h-2" />
+                    <p className="text-center text-sm text-muted-foreground mt-2">{progress}%</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedImage && mode === "manual" && !selectedImage.processedUrl && imageElement && !isProcessing && (
+              <ManualEditor
+                originalImage={selectedImage.originalUrl}
+                imageElement={imageElement}
+                onProcessed={handleManualProcessed}
+              />
+            )}
+
+            {selectedImage && selectedImage.processedUrl && !isProcessing && !isCropping && !hasCropped && !isUpscaling && selectedImage.status === 'done' && (
+              <div className="space-y-6">
+                <ImageComparison
+                  originalImage={selectedImage.originalUrl}
+                  processedImage={selectedImage.processedUrl}
+                  onDownload={handleDownload}
+                  onCopy={handleCopy}
+                  onStartCrop={handleStartCrop}
+                  onUpscale={handleUpscale}
+                  isUpscaling={isUpscaling}
+                />
+              </div>
+            )}
+
+            {selectedImage && selectedImage.status === 'processing' && (
+              <ProcessingIndicator progress={progress} />
+            )}
+
+            {selectedImage && selectedImage.status === 'pending' && (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <p>Waiting in queue...</p>
+              </div>
+            )}
+
+            {selectedImage && selectedImage.status === 'error' && (
+              <div className="flex flex-col items-center justify-center h-full text-destructive">
+                <p>Failed to process this image</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => handleRemoveImage(selectedImage.id)}
+                >
+                  Remove
                 </Button>
               </div>
-              <div className="flex justify-center">
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-                >
-                  Upload another image
-                </button>
+            )}
+
+            {selectedImage && selectedImage.processedUrl && hasCropped && !isCropping && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="relative w-full aspect-video bg-muted rounded-lg overflow-hidden shadow-strong checkerboard">
+                  <img src={selectedImage.processedUrl} alt="Cropped result" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
+                    <Maximize2 className="w-5 h-5 mr-2" />
+                    Upscale 2x
+                  </Button>
+                  <Button onClick={handleCopy} size="lg" variant="outline">
+                    <Copy className="w-5 h-5 mr-2" />
+                    Copy to Clipboard
+                  </Button>
+                  <Button
+                    onClick={handleDownload}
+                    size="lg"
+                    className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-soft"
+                  >
+                    <Download className="w-5 h-5 mr-2" />
+                    Download HD Image
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {isCropping && processedImage && (
-            <CropEditor imageUrl={processedImage} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />
-          )}
-        </main>
-
-        <footer className="mt-16 text-center text-sm text-muted-foreground">
-          <p>
-            Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
-            <br />
-            All processing happens in your browser. Your images never leave your device.
-          </p>
-        </footer>
-      </div>
+            {isCropping && selectedImage?.processedUrl && (
+              <CropEditor imageUrl={selectedImage.processedUrl} onCropApplied={handleCropApplied} onCancel={handleCropCancel} />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 export default Index;
