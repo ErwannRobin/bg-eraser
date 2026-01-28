@@ -16,6 +16,13 @@ import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2, Archive } from "lu
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import JSZip from "jszip";
 
+// History state type for undo
+interface HistoryState {
+  images: ProcessedImageItem[];
+  selectedImageId: string | null;
+  hasCropped: boolean;
+}
+
 const Index = () => {
   const [images, setImages] = useState<ProcessedImageItem[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -28,7 +35,52 @@ const Index = () => {
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const processingQueueRef = useRef<string[]>([]);
   const isProcessingRef = useRef(false);
+  const historyRef = useRef<HistoryState[]>([]);
   const { toast } = useToast();
+
+  // Save current state to history before making changes
+  const saveToHistory = useCallback(() => {
+    historyRef.current.push({
+      images: images.map(img => ({ ...img })),
+      selectedImageId,
+      hasCropped,
+    });
+    // Limit history to 20 states
+    if (historyRef.current.length > 20) {
+      historyRef.current.shift();
+    }
+  }, [images, selectedImageId, hasCropped]);
+
+  // Undo to previous state
+  const handleUndo = useCallback(() => {
+    const previousState = historyRef.current.pop();
+    if (previousState) {
+      setImages(previousState.images);
+      setSelectedImageId(previousState.selectedImageId);
+      setHasCropped(previousState.hasCropped);
+      toast({
+        title: "Undone",
+        description: "Reverted to previous state",
+      });
+    } else {
+      toast({
+        title: "Nothing to undo",
+        description: "No previous state available",
+      });
+    }
+  }, [toast]);
+
+  // Handle Ctrl+Z keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo]);
 
   const selectedImage = images.find((img) => img.id === selectedImageId) || null;
   const hasMultipleImages = images.length > 1;
@@ -180,6 +232,7 @@ const Index = () => {
 
   const handleManualProcessed = (blob: Blob, url: string) => {
     if (!selectedImageId) return;
+    saveToHistory();
     setImages((prev) =>
       prev.map((img) =>
         img.id === selectedImageId
@@ -195,6 +248,7 @@ const Index = () => {
 
   const handleCropApplied = (blob: Blob, url: string) => {
     if (!selectedImageId) return;
+    saveToHistory();
     setImages((prev) =>
       prev.map((img) =>
         img.id === selectedImageId
@@ -280,6 +334,7 @@ const Index = () => {
 
   const handleUpscale = async () => {
     if (!selectedImage?.processedUrl || !selectedImageId) return;
+    saveToHistory();
     try {
       setIsUpscaling(true);
       setProgress(0);
@@ -307,7 +362,7 @@ const Index = () => {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     // Clean up URLs
     images.forEach((img) => {
       URL.revokeObjectURL(img.originalUrl);
@@ -318,8 +373,12 @@ const Index = () => {
     setImageElement(null);
     setProgress(0);
     setHasCropped(false);
+    setIsCropping(false);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
     processingQueueRef.current = [];
-  };
+    historyRef.current = [];
+  }, [images]);
 
   // Handle paste events for image pasting
   useEffect(() => {
@@ -369,14 +428,18 @@ const Index = () => {
         </div>
 
         <header className="text-center mb-12 animate-fade-in">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
+          <button
+            onClick={handleReset}
+            className="flex items-center justify-center gap-3 mb-4 mx-auto group cursor-pointer"
+            title="Click to start over"
+          >
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft group-hover:scale-105 transition-transform">
               <Wand2 className="w-6 h-6 text-primary-foreground" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent group-hover:opacity-80 transition-opacity">
               BG Eraser
             </h1>
-          </div>
+          </button>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Remove image backgrounds instantly with AI-powered precision. Upload your photo and get professional results
             in seconds.
