@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Check, X } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Check, X, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface CropEditorProps {
   imageUrl: string;
@@ -13,6 +14,10 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [resizing, setResizing] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -32,13 +37,11 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
         let displayWidth, displayHeight, offsetX, offsetY;
         
         if (imgAspect > containerAspect) {
-          // Image is wider - fit to width
           displayWidth = containerWidth;
           displayHeight = containerWidth / imgAspect;
           offsetX = 0;
           offsetY = (containerHeight - displayHeight) / 2;
         } else {
-          // Image is taller - fit to height
           displayHeight = containerHeight;
           displayWidth = containerHeight * imgAspect;
           offsetY = 0;
@@ -105,6 +108,7 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
 
   const handleMouseDown = (e: React.MouseEvent, handle?: string) => {
     e.preventDefault();
+    e.stopPropagation();
     if (handle) {
       setResizing(handle);
     } else {
@@ -113,12 +117,32 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     setDragStart({ x: e.clientX, y: e.clientY });
   };
 
+  const handlePanMouseDown = (e: React.MouseEvent) => {
+    // Only pan if clicking outside the crop area and zoomed in
+    if (zoom > 1 && !isDragging && !resizing) {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning && zoom > 1) {
+      const newX = e.clientX - panStart.x;
+      const newY = e.clientY - panStart.y;
+      // Limit pan to reasonable bounds
+      const maxPan = (zoom - 1) * 200;
+      setPan({
+        x: Math.max(-maxPan, Math.min(maxPan, newX)),
+        y: Math.max(-maxPan, Math.min(maxPan, newY)),
+      });
+      return;
+    }
+
     if (!containerRef.current || imageDimensions.width === 0) return;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - dragStart.x) / rect.width) * 100;
-    const dy = ((e.clientY - dragStart.y) / rect.height) * 100;
+    const dx = ((e.clientX - dragStart.x) / rect.width) * 100 / zoom;
+    const dy = ((e.clientY - dragStart.y) / rect.height) * 100 / zoom;
 
     const minX = (imageDimensions.offsetX / rect.width) * 100;
     const minY = (imageDimensions.offsetY / rect.height) * 100;
@@ -162,6 +186,20 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   const handleMouseUp = () => {
     setIsDragging(false);
     setResizing(null);
+    setIsPanning(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(prev => Math.max(1, Math.min(4, prev + delta)));
+  };
+
+  const handleZoomChange = (value: number[]) => {
+    setZoom(value[0]);
+    if (value[0] === 1) {
+      setPan({ x: 0, y: 0 });
+    }
   };
 
   const handleApplyCrop = async () => {
@@ -216,63 +254,90 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     <div className="space-y-6 animate-fade-in">
       <div className="text-center">
         <p className="text-sm text-muted-foreground">
-          Adjust the crop area by dragging the corners and edges, or move the entire selection
+          Adjust the crop area. Use scroll wheel or slider to zoom for precision.
         </p>
+      </div>
+
+      {/* Zoom controls */}
+      <div className="flex items-center justify-center gap-4 px-4">
+        <ZoomOut className="w-4 h-4 text-muted-foreground" />
+        <Slider
+          value={[zoom]}
+          onValueChange={handleZoomChange}
+          min={1}
+          max={4}
+          step={0.1}
+          className="w-48"
+        />
+        <ZoomIn className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground w-12">{Math.round(zoom * 100)}%</span>
       </div>
       
       <div
         ref={containerRef}
-        className="relative w-full bg-muted rounded-lg overflow-hidden shadow-strong checkerboard"
+        className="relative w-full bg-muted rounded-lg overflow-hidden shadow-strong checkerboard cursor-crosshair"
         style={{ aspectRatio: imageRef.current ? `${imageRef.current.naturalWidth} / ${imageRef.current.naturalHeight}` : '16/9' }}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onMouseDown={handlePanMouseDown}
+        onWheel={handleWheel}
       >
-        <img
-          ref={imageRef}
-          src={imageUrl}
-          alt="Crop preview"
-          className="w-full h-full object-contain"
-          onLoad={() => setImageLoaded(true)}
-        />
-        
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-black/50" />
-        
-        {/* Crop area */}
         <div
-          className="absolute border-2 border-primary cursor-move"
           style={{
-            left: `${crop.x}%`,
-            top: `${crop.y}%`,
-            width: `${crop.width}%`,
-            height: `${crop.height}%`,
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+            transformOrigin: 'center center',
+            transition: isPanning ? 'none' : 'transform 0.1s ease-out',
           }}
-          onMouseDown={(e) => handleMouseDown(e)}
+          className="w-full h-full"
         >
-          {/* Resize handles */}
-          {['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'].map((handle) => (
-            <div
-              key={handle}
-              className="absolute w-3 h-3 bg-primary rounded-full border-2 border-background cursor-pointer hover:scale-125 transition-transform"
-              style={{
-                ...(handle.includes('n') && { top: -6 }),
-                ...(handle.includes('s') && { bottom: -6 }),
-                ...(handle.includes('w') && { left: -6 }),
-                ...(handle.includes('e') && { right: -6 }),
-                ...(handle === 'n' && { left: '50%', transform: 'translateX(-50%)' }),
-                ...(handle === 's' && { left: '50%', transform: 'translateX(-50%)' }),
-                ...(handle === 'e' && { top: '50%', transform: 'translateY(-50%)' }),
-                ...(handle === 'w' && { top: '50%', transform: 'translateY(-50%)' }),
-                cursor: handle.length === 2 ? `${handle}-resize` : `${handle === 'n' || handle === 's' ? 'ns' : 'ew'}-resize`,
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                handleMouseDown(e, handle);
-              }}
-            />
-          ))}
+          <img
+            ref={imageRef}
+            src={imageUrl}
+            alt="Crop preview"
+            className="w-full h-full object-contain"
+            onLoad={() => setImageLoaded(true)}
+            draggable={false}
+          />
+          
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-black/50 pointer-events-none" />
+          
+          {/* Crop area */}
+          <div
+            className="absolute border-2 border-primary cursor-move"
+            style={{
+              left: `${crop.x}%`,
+              top: `${crop.y}%`,
+              width: `${crop.width}%`,
+              height: `${crop.height}%`,
+              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+            }}
+            onMouseDown={(e) => handleMouseDown(e)}
+          >
+            {/* Resize handles */}
+            {['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'].map((handle) => (
+              <div
+                key={handle}
+                className="absolute w-3 h-3 bg-primary rounded-full border-2 border-background cursor-pointer hover:scale-125 transition-transform"
+                style={{
+                  ...(handle.includes('n') && { top: -6 }),
+                  ...(handle.includes('s') && { bottom: -6 }),
+                  ...(handle.includes('w') && { left: -6 }),
+                  ...(handle.includes('e') && { right: -6 }),
+                  ...(handle === 'n' && { left: '50%', transform: 'translateX(-50%)' }),
+                  ...(handle === 's' && { left: '50%', transform: 'translateX(-50%)' }),
+                  ...(handle === 'e' && { top: '50%', transform: 'translateY(-50%)' }),
+                  ...(handle === 'w' && { top: '50%', transform: 'translateY(-50%)' }),
+                  cursor: handle.length === 2 ? `${handle}-resize` : `${handle === 'n' || handle === 's' ? 'ns' : 'ew'}-resize`,
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  handleMouseDown(e, handle);
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
 

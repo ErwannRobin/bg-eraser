@@ -576,6 +576,10 @@ const Index = () => {
                 <img src={selectedImage.processedUrl} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={handleStartCrop} size="lg" variant="secondary">
+                  <Maximize2 className="w-5 h-5 mr-2" />
+                  Crop Again
+                </Button>
                 <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
                   <Maximize2 className="w-5 h-5 mr-2" />
                   Upscale 2x
