@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Check, X, ZoomIn, ZoomOut } from 'lucide-react';
@@ -8,6 +8,23 @@ interface CropEditorProps {
   onCropApplied: (blob: Blob, url: string) => void;
   onCancel: () => void;
 }
+
+type AspectRatioOption = {
+  label: string;
+  value: number | null; // null = free
+};
+
+const ASPECT_RATIOS: AspectRatioOption[] = [
+  { label: 'Free', value: null },
+  { label: 'Original', value: -1 }, // sentinel, computed at runtime
+  { label: '1:1', value: 1 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+  { label: '4:5', value: 4 / 5 },
+  { label: '9:16', value: 9 / 16 },
+  { label: 'A4', value: 210 / 297 },
+];
 
 export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProps) => {
   const [crop, setCrop] = useState({ x: 0, y: 0, width: 100, height: 100 });
@@ -22,6 +39,69 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 });
+  const [selectedRatio, setSelectedRatio] = useState<string>('Free');
+
+  const getEffectiveRatio = useCallback((): number | null => {
+    const opt = ASPECT_RATIOS.find(r => r.label === selectedRatio);
+    if (!opt || opt.value === null) return null;
+    if (opt.value === -1 && imageRef.current) {
+      return imageRef.current.naturalWidth / imageRef.current.naturalHeight;
+    }
+    return opt.value;
+  }, [selectedRatio]);
+
+  // Apply ratio constraint to crop centered on current crop center
+  const applyCropRatio = useCallback((ratio: number | null, currentCrop: typeof crop) => {
+    if (!ratio || !containerRef.current) return currentCrop;
+
+    const container = containerRef.current;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    const minXPct = (imageDimensions.offsetX / containerWidth) * 100;
+    const minYPct = (imageDimensions.offsetY / containerHeight) * 100;
+    const maxWPct = (imageDimensions.width / containerWidth) * 100;
+    const maxHPct = (imageDimensions.height / containerHeight) * 100;
+
+    // Convert ratio from image space to percentage space
+    const pctRatio = ratio * (containerHeight / containerWidth);
+
+    const cx = currentCrop.x + currentCrop.width / 2;
+    const cy = currentCrop.y + currentCrop.height / 2;
+
+    let newW = currentCrop.width;
+    let newH = newW / pctRatio;
+
+    if (newH > maxHPct) {
+      newH = maxHPct;
+      newW = newH * pctRatio;
+    }
+    if (newW > maxWPct) {
+      newW = maxWPct;
+      newH = newW / pctRatio;
+    }
+
+    let newX = cx - newW / 2;
+    let newY = cy - newH / 2;
+
+    newX = Math.max(minXPct, Math.min(minXPct + maxWPct - newW, newX));
+    newY = Math.max(minYPct, Math.min(minYPct + maxHPct - newH, newY));
+
+    return { x: newX, y: newY, width: newW, height: newH };
+  }, [imageDimensions]);
+
+  const handleRatioChange = (label: string) => {
+    setSelectedRatio(label);
+    const opt = ASPECT_RATIOS.find(r => r.label === label);
+    if (!opt) return;
+    let ratio = opt.value;
+    if (ratio === -1 && imageRef.current) {
+      ratio = imageRef.current.naturalWidth / imageRef.current.naturalHeight;
+    }
+    if (ratio !== null) {
+      setCrop(prev => applyCropRatio(ratio, prev));
+    }
+  };
 
   useEffect(() => {
     const updateImageDimensions = () => {
@@ -85,7 +165,6 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
           maxX = Math.min(canvas.width - 1, maxX + padding);
           maxY = Math.min(canvas.height - 1, maxY + padding);
 
-          // Convert natural coordinates to display percentages
           const xPercent = ((minX / canvas.width) * displayWidth + offsetX) / containerWidth * 100;
           const yPercent = ((minY / canvas.height) * displayHeight + offsetY) / containerHeight * 100;
           const widthPercent = ((maxX - minX + 1) / canvas.width) * displayWidth / containerWidth * 100;
@@ -118,7 +197,6 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   };
 
   const handlePanMouseDown = (e: React.MouseEvent) => {
-    // Only pan if clicking outside the crop area and zoomed in
     if (zoom > 1 && !isDragging && !resizing) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -129,7 +207,6 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     if (isPanning && zoom > 1) {
       const newX = e.clientX - panStart.x;
       const newY = e.clientY - panStart.y;
-      // Limit pan to reasonable bounds
       const maxPan = (zoom - 1) * 200;
       setPan({
         x: Math.max(-maxPan, Math.min(maxPan, newX)),
@@ -149,6 +226,8 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     const maxX = ((imageDimensions.offsetX + imageDimensions.width) / rect.width) * 100;
     const maxY = ((imageDimensions.offsetY + imageDimensions.height) / rect.height) * 100;
 
+    const ratio = getEffectiveRatio();
+
     if (isDragging) {
       setCrop(prev => ({
         ...prev,
@@ -159,23 +238,54 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     } else if (resizing) {
       setCrop(prev => {
         let newCrop = { ...prev };
+        const pctRatio = ratio ? ratio * (rect.height / rect.width) : null;
         
         if (resizing.includes('n')) {
           const newY = Math.max(minY, Math.min(prev.y + prev.height - 5, prev.y + dy));
           newCrop.height = prev.height + (prev.y - newY);
           newCrop.y = newY;
+          if (pctRatio) {
+            newCrop.width = newCrop.height * pctRatio;
+            // Keep centered horizontally
+            const cx = prev.x + prev.width / 2;
+            newCrop.x = cx - newCrop.width / 2;
+          }
         }
         if (resizing.includes('s')) {
           newCrop.height = Math.max(5, Math.min(maxY - prev.y, prev.height + dy));
+          if (pctRatio) {
+            newCrop.width = newCrop.height * pctRatio;
+            const cx = prev.x + prev.width / 2;
+            newCrop.x = cx - newCrop.width / 2;
+          }
         }
-        if (resizing.includes('w')) {
-          const newX = Math.max(minX, Math.min(prev.x + prev.width - 5, prev.x + dx));
-          newCrop.width = prev.width + (prev.x - newX);
-          newCrop.x = newX;
+        if (resizing.includes('w') && !pctRatio) {
+          const newXVal = Math.max(minX, Math.min(prev.x + prev.width - 5, prev.x + dx));
+          newCrop.width = prev.width + (prev.x - newXVal);
+          newCrop.x = newXVal;
         }
-        if (resizing.includes('e')) {
+        if (resizing.includes('e') && !pctRatio) {
           newCrop.width = Math.max(5, Math.min(maxX - prev.x, prev.width + dx));
         }
+
+        if (pctRatio && (resizing.includes('e') || resizing.includes('w')) && !resizing.includes('n') && !resizing.includes('s')) {
+          if (resizing.includes('w')) {
+            const newXVal = Math.max(minX, Math.min(prev.x + prev.width - 5, prev.x + dx));
+            newCrop.width = prev.width + (prev.x - newXVal);
+            newCrop.x = newXVal;
+          } else {
+            newCrop.width = Math.max(5, Math.min(maxX - prev.x, prev.width + dx));
+          }
+          newCrop.height = newCrop.width / pctRatio;
+          const cy = prev.y + prev.height / 2;
+          newCrop.y = cy - newCrop.height / 2;
+        }
+
+        // Clamp within image bounds
+        newCrop.x = Math.max(minX, newCrop.x);
+        newCrop.y = Math.max(minY, newCrop.y);
+        if (newCrop.x + newCrop.width > maxX) newCrop.width = maxX - newCrop.x;
+        if (newCrop.y + newCrop.height > maxY) newCrop.height = maxY - newCrop.y;
         
         return newCrop;
       });
@@ -214,13 +324,11 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
     const naturalWidth = img.naturalWidth;
     const naturalHeight = img.naturalHeight;
 
-    // Convert container percentages to display pixels
     const cropXDisplay = (crop.x / 100) * container.clientWidth - imageDimensions.offsetX;
     const cropYDisplay = (crop.y / 100) * container.clientHeight - imageDimensions.offsetY;
     const cropWidthDisplay = (crop.width / 100) * container.clientWidth;
     const cropHeightDisplay = (crop.height / 100) * container.clientHeight;
 
-    // Convert display pixels to natural pixels
     const scaleX = naturalWidth / imageDimensions.width;
     const scaleY = naturalHeight / imageDimensions.height;
     
@@ -251,11 +359,28 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <div className="text-center">
         <p className="text-sm text-muted-foreground">
           Adjust the crop area. Use scroll wheel or slider to zoom for precision.
         </p>
+      </div>
+
+      {/* Aspect ratio selector */}
+      <div className="flex items-center justify-center gap-1.5 flex-wrap px-4">
+        {ASPECT_RATIOS.map((r) => (
+          <button
+            key={r.label}
+            onClick={() => handleRatioChange(r.label)}
+            className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+              selectedRatio === r.label
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
 
       {/* Zoom controls */}
