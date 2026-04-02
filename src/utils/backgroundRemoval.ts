@@ -5,31 +5,28 @@ env.allowLocalModels = false;
 env.useBrowserCache = true;
 env.backends.onnx.wasm.numThreads = 1; // Optimize for web workers
 
-const MAX_IMAGE_DIMENSION = 1024;
+const MAX_MODEL_DIMENSION = 1024;
 
-function resizeImageIfNeeded(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, image: HTMLImageElement) {
+function createModelCanvas(image: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
   let width = image.naturalWidth;
   let height = image.naturalHeight;
 
-  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+  if (width > MAX_MODEL_DIMENSION || height > MAX_MODEL_DIMENSION) {
     if (width > height) {
-      height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
-      width = MAX_IMAGE_DIMENSION;
+      height = Math.round((height * MAX_MODEL_DIMENSION) / width);
+      width = MAX_MODEL_DIMENSION;
     } else {
-      width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
-      height = MAX_IMAGE_DIMENSION;
+      width = Math.round((width * MAX_MODEL_DIMENSION) / height);
+      height = MAX_MODEL_DIMENSION;
     }
-
-    canvas.width = width;
-    canvas.height = height;
-    ctx.drawImage(image, 0, 0, width, height);
-    return true;
   }
 
   canvas.width = width;
   canvas.height = height;
-  ctx.drawImage(image, 0, 0);
-  return false;
+  ctx.drawImage(image, 0, 0, width, height);
+  return canvas;
 }
 
 // Apply alpha matting with feathering for smooth edges
