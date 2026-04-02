@@ -273,7 +273,8 @@ const Index = () => {
       const url = URL.createObjectURL(selectedImage.processedBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `removed-bg-${Date.now()}.png`;
+      const baseName = selectedImage.originalFile.name.replace(/\.[^/.]+$/, '');
+      a.download = `${baseName}.bg-eraser.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -288,7 +289,8 @@ const Index = () => {
     const zip = new JSZip();
     doneImages.forEach((img, index) => {
       if (img.processedBlob) {
-        const name = `removed-bg-${img.originalFile.name.split('.')[0] || index}.png`;
+        const baseName = img.originalFile.name.replace(/\.[^/.]+$/, '');
+        const name = `${baseName}.bg-eraser.png`;
         zip.file(name, img.processedBlob);
       }
     });
