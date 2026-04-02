@@ -273,7 +273,8 @@ const Index = () => {
       const url = URL.createObjectURL(selectedImage.processedBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `removed-bg-${Date.now()}.png`;
+      const baseName = selectedImage.originalFile.name.replace(/\.[^/.]+$/, '');
+      a.download = `${baseName}.bg-eraser.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
