@@ -289,7 +289,8 @@ const Index = () => {
     const zip = new JSZip();
     doneImages.forEach((img, index) => {
       if (img.processedBlob) {
-        const name = `removed-bg-${img.originalFile.name.split('.')[0] || index}.png`;
+        const baseName = img.originalFile.name.replace(/\.[^/.]+$/, '');
+        const name = `${baseName}.bg-eraser.png`;
         zip.file(name, img.processedBlob);
       }
     });
