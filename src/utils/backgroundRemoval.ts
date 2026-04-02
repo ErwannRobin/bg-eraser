@@ -86,15 +86,9 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(5);
     
-    // Convert HTMLImageElement to canvas for preprocessing
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    
-    if (!ctx) throw new Error('Could not get canvas context');
-    
-    // Resize image if needed
-    const wasResized = resizeImageIfNeeded(canvas, ctx, imageElement);
-    console.log(`Image preprocessed. Dimensions: ${canvas.width}x${canvas.height}`);
+    // Create a small canvas for the model (max 1024px)
+    const modelCanvas = createModelCanvas(imageElement);
+    console.log(`Model input: ${modelCanvas.width}x${modelCanvas.height}, Original: ${imageElement.naturalWidth}x${imageElement.naturalHeight}`);
     
     if (onProgress) onProgress(15);
     
@@ -122,42 +116,43 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(40);
     
-    // Convert canvas to RawImage
-    const image = await RawImage.fromURL(canvas.toDataURL('image/png'));
+    // Run model on small canvas
+    const image = await RawImage.fromURL(modelCanvas.toDataURL('image/png'));
     
     if (onProgress) onProgress(50);
     
-    // Preprocess and run inference
     console.log('Running segmentation inference...');
     const { pixel_values } = await processor(image);
     const { output } = await model({ input: pixel_values });
     
     if (onProgress) onProgress(75);
     
-    console.log('Segmentation complete, applying alpha matting...');
+    console.log('Segmentation complete, applying mask to full-resolution image...');
     
     if (!output) {
       throw new Error('Invalid segmentation result');
     }
     
-    // Create output canvas
+    // Create output canvas at FULL original resolution
+    const fullWidth = imageElement.naturalWidth;
+    const fullHeight = imageElement.naturalHeight;
     const outputCanvas = document.createElement('canvas');
-    outputCanvas.width = canvas.width;
-    outputCanvas.height = canvas.height;
+    outputCanvas.width = fullWidth;
+    outputCanvas.height = fullHeight;
     const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
     
     if (!outputCtx) throw new Error('Could not get output canvas context');
     
-    // Draw original image
-    outputCtx.drawImage(canvas, 0, 0);
+    // Draw original full-resolution image
+    outputCtx.drawImage(imageElement, 0, 0);
     
     if (onProgress) onProgress(85);
     
-    // Get image data for alpha channel manipulation
-    const outputImageData = outputCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
+    // Get full-res image data
+    const outputImageData = outputCtx.getImageData(0, 0, fullWidth, fullHeight);
     
-    // Resize mask back to original size
-    const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(canvas.width, canvas.height);
+    // Resize mask to full resolution
+    const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(fullWidth, fullHeight);
     
     // Convert mask to Float32Array for alpha matting
     const maskFloat = new Float32Array(mask.data.length);
@@ -169,7 +164,7 @@ export const removeBackground = async (
     applyAlphaMatting(outputImageData, maskFloat, 3);
     
     outputCtx.putImageData(outputImageData, 0, 0);
-    console.log('Alpha matting applied with feathered edges');
+    console.log('Alpha matting applied at full resolution');
     
     if (onProgress) onProgress(95);
     
@@ -178,7 +173,7 @@ export const removeBackground = async (
       outputCanvas.toBlob(
         (blob) => {
           if (blob) {
-            console.log('Background removal complete');
+            console.log('Background removal complete at full resolution');
             if (onProgress) onProgress(100);
             resolve(blob);
           } else {
