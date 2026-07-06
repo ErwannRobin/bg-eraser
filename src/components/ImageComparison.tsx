@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Crop, Copy, Maximize2 } from 'lucide-react';
+import { Download, Crop, Copy, Maximize2, Image } from 'lucide-react';
 
 interface ImageComparisonProps {
   originalImage: string;
   processedImage: string;
   onDownload: () => void;
+  onDownloadOriginal: () => void;
   onCopy: () => void;
   onStartCrop: () => void;
   onUpscale: () => void;
@@ -16,6 +17,7 @@ export const ImageComparison = ({
   originalImage,
   processedImage,
   onDownload,
+  onDownloadOriginal,
   onCopy,
   onStartCrop,
   onUpscale,
@@ -71,6 +73,14 @@ export const ImageComparison = ({
         </div>
       </div>
         <div className="flex flex-wrap justify-center gap-3">
+          <Button
+            onClick={onDownloadOriginal}
+            size="lg"
+            variant="ghost"
+          >
+            <Image className="w-5 h-5 mr-2" />
+            Original
+          </Button>
           <Button
             onClick={onStartCrop}
             size="lg"
