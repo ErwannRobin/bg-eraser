@@ -563,7 +563,7 @@ const Index = () => {
                   </div>
                   <div className="flex-1">
                     <ImageComparison
-                      originalImage={selectedImage.originalUrl}
+                      originalImage={selectedImage.upscaledOriginalUrl || selectedImage.originalUrl}
                       processedImage={selectedImage.processedUrl}
                       onDownload={handleDownload}
                       onDownloadOriginal={handleDownloadOriginal}
