@@ -394,6 +394,7 @@ const Index = () => {
     images.forEach((img) => {
       URL.revokeObjectURL(img.originalUrl);
       if (img.processedUrl) URL.revokeObjectURL(img.processedUrl);
+      if (img.upscaledOriginalUrl) URL.revokeObjectURL(img.upscaledOriginalUrl);
     });
     setImages([]);
     setSelectedImageId(null);
