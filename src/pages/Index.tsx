@@ -272,8 +272,14 @@ const Index = () => {
   const handleDownloadOriginal = () => {
     if (selectedImage) {
       const a = document.createElement("a");
-      a.href = selectedImage.originalUrl;
-      a.download = selectedImage.originalFile.name;
+      if (selectedImage.upscaledOriginalUrl && selectedImage.upscaledOriginalBlob) {
+        a.href = selectedImage.upscaledOriginalUrl;
+        const baseName = selectedImage.originalFile.name.replace(/\.[^/.]+$/, '');
+        a.download = `${baseName}.upscaled.png`;
+      } else {
+        a.href = selectedImage.originalUrl;
+        a.download = selectedImage.originalFile.name;
+      }
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
