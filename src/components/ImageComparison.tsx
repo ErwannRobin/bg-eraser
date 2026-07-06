@@ -76,10 +76,10 @@ export const ImageComparison = ({
           <Button
             onClick={onDownloadOriginal}
             size="lg"
-            variant="ghost"
+            variant="outline"
           >
             <Image className="w-5 h-5 mr-2" />
-            Original
+            Download Original
           </Button>
           <Button
             onClick={onStartCrop}
@@ -92,7 +92,7 @@ export const ImageComparison = ({
           <Button
             onClick={onUpscale}
             size="lg"
-            variant="secondary"
+            variant="outline"
             disabled={isUpscaling}
           >
             <Maximize2 className="w-5 h-5 mr-2" />
