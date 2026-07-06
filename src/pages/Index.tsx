@@ -579,7 +579,7 @@ const Index = () => {
               {/* Single image - original layout */}
               {!hasMultipleImages && (
                 <ImageComparison
-                  originalImage={selectedImage.originalUrl}
+                  originalImage={selectedImage.upscaledOriginalUrl || selectedImage.originalUrl}
                   processedImage={selectedImage.processedUrl}
                   onDownload={handleDownload}
                   onDownloadOriginal={handleDownloadOriginal}
