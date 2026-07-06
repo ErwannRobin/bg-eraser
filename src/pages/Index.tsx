@@ -38,6 +38,8 @@ const Index = () => {
   const historyRef = useRef<HistoryState[]>([]);
   const { toast } = useToast();
 
+  const selectedImage = images.find((img) => img.id === selectedImageId) || null;
+
   // Save current state to history before making changes
   const saveToHistory = useCallback(() => {
     historyRef.current.push({
@@ -81,9 +83,6 @@ const Index = () => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo]);
-
-  const selectedImage = images.find((img) => img.id === selectedImageId) || null;
-  const hasMultipleImages = images.length > 1;
 
   // Process next image in queue
   const processNextInQueue = useCallback(async () => {
@@ -268,6 +267,17 @@ const Index = () => {
     setIsCropping(false);
   };
 
+  const handleDownloadOriginal = () => {
+    if (selectedImage) {
+      const a = document.createElement("a");
+      a.href = selectedImage.originalUrl;
+      a.download = selectedImage.originalFile.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
   const handleDownload = () => {
     if (selectedImage?.processedBlob) {
       const url = URL.createObjectURL(selectedImage.processedBlob);
@@ -415,6 +425,7 @@ const Index = () => {
   }, [selectedImageId]);
 
   const hasImages = images.length > 0;
+  const hasMultipleImages = images.length > 1;
   const doneCount = images.filter((img) => img.status === 'done').length;
 
   return (
@@ -539,6 +550,7 @@ const Index = () => {
                       originalImage={selectedImage.originalUrl}
                       processedImage={selectedImage.processedUrl}
                       onDownload={handleDownload}
+                      onDownloadOriginal={handleDownloadOriginal}
                       onCopy={handleCopy}
                       onStartCrop={handleStartCrop}
                       onUpscale={handleUpscale}
@@ -554,6 +566,7 @@ const Index = () => {
                   originalImage={selectedImage.originalUrl}
                   processedImage={selectedImage.processedUrl}
                   onDownload={handleDownload}
+                  onDownloadOriginal={handleDownloadOriginal}
                   onCopy={handleCopy}
                   onStartCrop={handleStartCrop}
                   onUpscale={handleUpscale}
@@ -578,10 +591,6 @@ const Index = () => {
                 <img src={selectedImage.processedUrl} alt="Cropped result" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-wrap justify-center gap-3">
-                <Button onClick={handleStartCrop} size="lg" variant="secondary">
-                  <Maximize2 className="w-5 h-5 mr-2" />
-                  Crop Again
-                </Button>
                 <Button onClick={handleUpscale} size="lg" variant="secondary" disabled={isUpscaling}>
                   <Maximize2 className="w-5 h-5 mr-2" />
                   Upscale 2x
