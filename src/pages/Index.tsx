@@ -358,11 +358,18 @@ const Index = () => {
     try {
       setIsUpscaling(true);
       setProgress(0);
-      const { blob, url } = await upscaleImage(selectedImage.processedUrl, setProgress);
+
+      // Upscale both processed and original images in parallel
+      const [{ blob: processedBlob, url: processedUrl }, { blob: originalBlob, url: originalUrl }] =
+        await Promise.all([
+          upscaleImage(selectedImage.processedUrl, (p) => setProgress(Math.round(p * 0.5))),
+          upscaleImage(selectedImage.originalUrl, (p) => setProgress(50 + Math.round(p * 0.5))),
+        ]);
+
       setImages((prev) =>
         prev.map((img) =>
           img.id === selectedImageId
-            ? { ...img, processedUrl: url, processedBlob: blob }
+            ? { ...img, processedUrl, processedBlob, upscaledOriginalUrl: originalUrl, upscaledOriginalBlob: originalBlob }
             : img
         )
       );
