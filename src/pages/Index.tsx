@@ -161,6 +161,8 @@ const Index = () => {
         originalUrl: URL.createObjectURL(file),
         processedUrl: null,
         processedBlob: null,
+        upscaledOriginalUrl: null,
+        upscaledOriginalBlob: null,
         status: mode === "ai" ? 'pending' as const : 'done' as const,
       }));
 
@@ -270,8 +272,14 @@ const Index = () => {
   const handleDownloadOriginal = () => {
     if (selectedImage) {
       const a = document.createElement("a");
-      a.href = selectedImage.originalUrl;
-      a.download = selectedImage.originalFile.name;
+      if (selectedImage.upscaledOriginalUrl && selectedImage.upscaledOriginalBlob) {
+        a.href = selectedImage.upscaledOriginalUrl;
+        const baseName = selectedImage.originalFile.name.replace(/\.[^/.]+$/, '');
+        a.download = `${baseName}.upscaled.png`;
+      } else {
+        a.href = selectedImage.originalUrl;
+        a.download = selectedImage.originalFile.name;
+      }
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -350,11 +358,18 @@ const Index = () => {
     try {
       setIsUpscaling(true);
       setProgress(0);
-      const { blob, url } = await upscaleImage(selectedImage.processedUrl, setProgress);
+
+      // Upscale both processed and original images in parallel
+      const [{ blob: processedBlob, url: processedUrl }, { blob: originalBlob, url: originalUrl }] =
+        await Promise.all([
+          upscaleImage(selectedImage.processedUrl, (p) => setProgress(Math.round(p * 0.5))),
+          upscaleImage(selectedImage.originalUrl, (p) => setProgress(50 + Math.round(p * 0.5))),
+        ]);
+
       setImages((prev) =>
         prev.map((img) =>
           img.id === selectedImageId
-            ? { ...img, processedUrl: url, processedBlob: blob }
+            ? { ...img, processedUrl, processedBlob, upscaledOriginalUrl: originalUrl, upscaledOriginalBlob: originalBlob }
             : img
         )
       );
@@ -379,6 +394,7 @@ const Index = () => {
     images.forEach((img) => {
       URL.revokeObjectURL(img.originalUrl);
       if (img.processedUrl) URL.revokeObjectURL(img.processedUrl);
+      if (img.upscaledOriginalUrl) URL.revokeObjectURL(img.upscaledOriginalUrl);
     });
     setImages([]);
     setSelectedImageId(null);
@@ -547,7 +563,7 @@ const Index = () => {
                   </div>
                   <div className="flex-1">
                     <ImageComparison
-                      originalImage={selectedImage.originalUrl}
+                      originalImage={selectedImage.upscaledOriginalUrl || selectedImage.originalUrl}
                       processedImage={selectedImage.processedUrl}
                       onDownload={handleDownload}
                       onDownloadOriginal={handleDownloadOriginal}
@@ -563,7 +579,7 @@ const Index = () => {
               {/* Single image - original layout */}
               {!hasMultipleImages && (
                 <ImageComparison
-                  originalImage={selectedImage.originalUrl}
+                  originalImage={selectedImage.upscaledOriginalUrl || selectedImage.originalUrl}
                   processedImage={selectedImage.processedUrl}
                   onDownload={handleDownload}
                   onDownloadOriginal={handleDownloadOriginal}

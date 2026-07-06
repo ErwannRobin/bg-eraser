@@ -7,6 +7,8 @@ export interface ProcessedImageItem {
   originalUrl: string;
   processedUrl: string | null;
   processedBlob: Blob | null;
+  upscaledOriginalUrl: string | null;
+  upscaledOriginalBlob: Blob | null;
   status: 'pending' | 'processing' | 'done' | 'error';
 }
 
