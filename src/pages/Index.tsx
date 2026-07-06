@@ -161,6 +161,8 @@ const Index = () => {
         originalUrl: URL.createObjectURL(file),
         processedUrl: null,
         processedBlob: null,
+        upscaledOriginalUrl: null,
+        upscaledOriginalBlob: null,
         status: mode === "ai" ? 'pending' as const : 'done' as const,
       }));
 
