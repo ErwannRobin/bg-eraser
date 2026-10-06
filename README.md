@@ -1,26 +1,103 @@
-# bg-eraser
+# BG Eraser
 
-Build a web service like Remove.bg that instantly removes image backgrounds in HD quality. Users can upload photos, get transparent backgrounds, and download the results. Include a simple, clean UI with drag-and-drop upload, progress preview, and high-resolution output support. Prioritize speed, accuracy, and scalability.
+Remove image backgrounds directly in your browser. No upload, no signup, no server.
 
-This project was built with [Lovable](https://lovable.dev).
+**Live app:** https://bg-eraser.lovable.app
 
-**Live app**: https://bg-eraser.lovable.app
+BG Eraser is a static single-page app. The AI model runs on your device through [Transformers.js](https://github.com/huggingface/transformers.js) (ONNX Runtime Web). Your images are never sent to a server.
 
-## Build with Lovable
+## Features
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/102b8b2c-135a-45e7-90db-4ff39f94d72f).
+- **AI mode**: automatic background removal with the [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4) segmentation model.
+- **Manual mode**: click the image (or use a color picker) to choose colors to remove, with an adjustable tolerance.
+- **Batch processing**: drop several images at once. They are processed one after another.
+- **HEIC/HEIF support**: iPhone photos are converted to JPEG in the browser first.
+- **Full-resolution output**: the result keeps the size of the original image.
+- **Compare view**: before/after comparison of the original and the result.
+- **Crop**: free crop or fixed aspect ratios.
+- **2x upscale**: canvas upscale with a light sharpen filter (not an AI upscaler).
+- **Export**: download PNG (named `<original>.bg-eraser.png`), copy to clipboard, or download all results as a ZIP.
+- **Undo** with `Ctrl/Cmd + Z` (last 20 states), and a light/dark theme.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+## How it works
 
-## Development
+1. **Load.** The image is loaded into an `<img>`. HEIC/HEIF files are converted to JPEG first (`src/utils/heicConverter.ts`).
+2. **Downscale for the model.** A copy of the image is resized so its longest side is at most 1024 px.
+3. **Segment.** `briaai/RMBG-1.4` runs through Transformers.js and returns a foreground mask. The model is requested with the `webgpu` device (`src/utils/backgroundRemoval.ts`).
+4. **Apply the mask at full size.** The mask is resized to the original resolution and used as the alpha channel of the original pixels. A small Gaussian blur (radius 3 px) smooths the edges.
+5. **Export.** The canvas is encoded as a PNG with transparency.
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Manual mode (`src/utils/manualBackgroundRemoval.ts`) skips the model. Every pixel whose RGB distance to a picked color is below the tolerance becomes transparent.
+
+### Privacy and network
+
+- Images are processed locally and are not uploaded.
+- On first use, the browser downloads the model files from the Hugging Face Hub (`huggingface.co`). They are cached by the browser, so later runs work from the cache.
+- The app has no analytics and no backend.
+
+### Limitations
+
+- The first run is slow because of the model download.
+- WebGPU gives the best speed. Browsers without WebGPU may fail or be slow; this fallback is not tested in this repository.
+- The model sees at most 1024 px, so very fine details (hair, for example) are limited by that resolution.
+- Large images use a lot of browser memory.
+
+## Tech stack
+
+React 18, TypeScript, Vite, Tailwind CSS, [shadcn/ui](https://ui.shadcn.com/) (Radix UI), Transformers.js, `heic-convert`, JSZip.
+
+## Getting started
+
+Requirements: Node.js 18 or newer and npm.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+git clone https://github.com/erwannrobin/bg-eraser.git
+cd bg-eraser
+make install   # npm ci
+make dev       # http://localhost:8080
 ```
+
+### Make targets
+
+| Target | Description |
+| --- | --- |
+| `make help` | List all targets |
+| `make install` | Install dependencies |
+| `make dev` | Start the dev server |
+| `make build` | Production build in `dist/` |
+| `make preview` | Build and serve the production build |
+| `make lint` | Run ESLint |
+| `make typecheck` | Run the TypeScript compiler |
+| `make check` | Lint, typecheck and build |
+| `make audit` | Audit production dependencies |
+| `make clean` | Remove build output |
+| `make distclean` | Remove build output and `node_modules` |
+
+You can also call the npm scripts directly (`npm run dev`, `npm run build`, `npm run lint`).
+
+## Project structure
+
+```
+src/
+  pages/Index.tsx        Main screen: queue, modes, export, undo
+  components/            Upload, comparison, manual editor, crop editor, UI parts
+  components/ui/         shadcn/ui components
+  utils/
+    backgroundRemoval.ts        AI pipeline (model, mask, feathering)
+    manualBackgroundRemoval.ts  Color-based removal
+    imageCrop.ts                Crop helper
+    imageUpscale.ts             2x upscale + sharpen
+    heicConverter.ts            HEIC/HEIF to JPEG
+```
+
+## Deployment
+
+`make build` creates a static site in `dist/`. Host it on any static host. No server code or environment variables are needed.
+
+## Credits
+
+Built with [Lovable](https://lovable.dev). Model: [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4) by BRIA AI. Please check the model license before any commercial use.
+
+## License
+
+To be defined (a `LICENSE` file will be added).
