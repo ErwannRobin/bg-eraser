@@ -65,10 +65,10 @@ export const ImageComparison = ({
           onChange={handleSliderChange}
           className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize"
         />
-        <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium">
+        <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-xs px-3 py-1 rounded-full text-sm font-medium">
           Original
         </div>
-        <div className="absolute top-4 right-4 bg-primary/80 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-primary-foreground">
+        <div className="absolute top-4 right-4 bg-primary/80 backdrop-blur-xs px-3 py-1 rounded-full text-sm font-medium text-primary-foreground">
           Processed
         </div>
       </div>

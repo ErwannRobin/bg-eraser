@@ -543,7 +543,7 @@ const Index = () => {
               {/* Thumbnail sidebar for multiple images */}
               {hasMultipleImages && (
                 <div className="flex gap-4">
-                  <div className="w-20 flex-shrink-0 space-y-2">
+                  <div className="w-20 shrink-0 space-y-2">
                     <ImageThumbnailList
                       images={images}
                       selectedId={selectedImageId}
