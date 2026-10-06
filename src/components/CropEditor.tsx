@@ -237,7 +237,7 @@ export const CropEditor = ({ imageUrl, onCropApplied, onCancel }: CropEditorProp
       setDragStart({ x: e.clientX, y: e.clientY });
     } else if (resizing) {
       setCrop(prev => {
-        let newCrop = { ...prev };
+        const newCrop = { ...prev };
         const pctRatio = ratio ? ratio * (rect.height / rect.width) : null;
         
         if (resizing.includes('n')) {

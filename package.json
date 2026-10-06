@@ -1,7 +1,26 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "bg-eraser",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Remove image backgrounds in your browser with AI. No upload, no server.",
+  "license": "MIT",
+  "author": "Erwann Robin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErwannRobin/bg-eraser.git"
+  },
+  "homepage": "https://github.com/ErwannRobin/bg-eraser#readme",
+  "bugs": {
+    "url": "https://github.com/ErwannRobin/bg-eraser/issues"
+  },
+  "keywords": [
+    "background-removal",
+    "image",
+    "transformers-js",
+    "webgpu",
+    "react",
+    "vite"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

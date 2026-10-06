@@ -96,8 +96,10 @@ src/
 
 ## Credits
 
-Built with [Lovable](https://lovable.dev). Model: [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4) by BRIA AI. Please check the model license before any commercial use.
+Built with [Lovable](https://lovable.dev). Model: [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4) by BRIA AI.
 
 ## License
 
-To be defined (a `LICENSE` file will be added).
+The source code is released under the [MIT License](LICENSE).
+
+**The AI model is not covered by this license.** BRIA RMBG-1.4 is downloaded from the Hugging Face Hub at runtime and has its own license terms, which may restrict commercial use. Read the [model card](https://huggingface.co/briaai/RMBG-1.4) before using this app commercially.

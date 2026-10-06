@@ -82,20 +82,18 @@ export const removeBackground = async (
   onProgress?: (progress: number) => void
 ): Promise<Blob> => {
   try {
-    console.log('Starting WebGPU-accelerated background removal...');
-    
     if (onProgress) onProgress(5);
     
     // Create a small canvas for the model (max 1024px)
     const modelCanvas = createModelCanvas(imageElement);
-    console.log(`Model input: ${modelCanvas.width}x${modelCanvas.height}, Original: ${imageElement.naturalWidth}x${imageElement.naturalHeight}`);
     
     if (onProgress) onProgress(15);
     
     // Initialize RMBG model with WebGPU (falls back to WASM automatically)
-    console.log('Loading BRIA RMBG-1.4 model with WebGPU acceleration...');
     const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
       device: 'webgpu',
+      // transformers.js config typings do not cover this custom model
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       config: { model_type: 'custom' } as any,
     });
     
@@ -111,6 +109,7 @@ export const removeBackground = async (
         resample: 2,
         rescale_factor: 0.00392156862745098,
         size: { width: 1024, height: 1024 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any
     });
     
@@ -121,13 +120,10 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(50);
     
-    console.log('Running segmentation inference...');
     const { pixel_values } = await processor(image);
     const { output } = await model({ input: pixel_values });
     
     if (onProgress) onProgress(75);
-    
-    console.log('Segmentation complete, applying mask to full-resolution image...');
     
     if (!output) {
       throw new Error('Invalid segmentation result');
@@ -164,7 +160,6 @@ export const removeBackground = async (
     applyAlphaMatting(outputImageData, maskFloat, 3);
     
     outputCtx.putImageData(outputImageData, 0, 0);
-    console.log('Alpha matting applied at full resolution');
     
     if (onProgress) onProgress(95);
     
@@ -173,7 +168,6 @@ export const removeBackground = async (
       outputCanvas.toBlob(
         (blob) => {
           if (blob) {
-            console.log('Background removal complete at full resolution');
             if (onProgress) onProgress(100);
             resolve(blob);
           } else {
