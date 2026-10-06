@@ -94,6 +94,10 @@ src/
 
 `make build` creates a static site in `dist/`. Host it on any static host. No server code or environment variables are needed.
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). For security issues, see [SECURITY.md](SECURITY.md).
+
 ## Credits
 
 Built with [Lovable](https://lovable.dev). Model: [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4) by BRIA AI.
