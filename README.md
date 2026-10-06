@@ -68,7 +68,9 @@ make dev       # http://localhost:8080
 | `make preview` | Build and serve the production build |
 | `make lint` | Run ESLint |
 | `make typecheck` | Run the TypeScript compiler |
-| `make check` | Lint, typecheck and build |
+| `make test` | Run the unit tests (Vitest) |
+| `make coverage` | Run the tests with a coverage report |
+| `make check` | Lint, typecheck, test and build |
 | `make audit` | Audit production dependencies |
 | `make clean` | Remove build output |
 | `make distclean` | Remove build output and `node_modules` |
