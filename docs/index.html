@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BG Eraser – Remove Image Backgrounds in Your Browser</title>
+  <meta name="description" content="Open source background remover. AI runs on your device, so your images are never uploaded. No signup, no server.">
+  <link rel="icon" href="assets/favicon.png" type="image/png">
+  <link rel="canonical" href="https://erwannrobin.github.io/bg-eraser/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="BG Eraser – Remove Image Backgrounds in Your Browser">
+  <meta property="og:description" content="Open source background remover. AI runs on your device, so your images are never uploaded.">
+  <meta property="og:url" content="https://erwannrobin.github.io/bg-eraser/">
+  <meta property="og:image" content="https://erwannrobin.github.io/bg-eraser/assets/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .hero { padding: 80px 0 56px; text-align: center; }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .hero .lead { margin: 18px auto 30px; }
+    .hero .btn-row { justify-content: center; }
+    .shot {
+      margin: 48px auto 0;
+      max-width: 880px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: var(--surface);
+    }
+    .shot img { display: block; width: 100%; height: auto; }
+    .pill-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 22px; }
+    .cta {
+      text-align: center;
+      background: var(--accent-soft);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px 20px;
+    }
+    .cta .btn-row { justify-content: center; margin-top: 20px; }
+    .cols { display: grid; gap: 32px; grid-template-columns: 1fr 1fr; align-items: center; }
+    @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } .hero { padding-top: 48px; } }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="assets/favicon.png" alt="">BG Eraser</a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/ErwannRobin/bg-eraser">GitHub</a>
+      <a href="https://erwann.lovable.app">Portfolio</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Open source · MIT license</p>
+      <h1>Remove backgrounds.<br><em>Keep your images private.</em></h1>
+      <p class="lead">BG Eraser runs the AI model inside your browser. Drop a photo, get a transparent PNG. No upload, no signup, no server.</p>
+      <div class="btn-row">
+        <a class="btn primary" href="https://bg-eraser.lovable.app">Try the live app →</a>
+        <a class="btn" href="https://github.com/ErwannRobin/bg-eraser">View on GitHub</a>
+      </div>
+      <div class="pill-row">
+        <span class="tag">React</span><span class="tag">TypeScript</span><span class="tag">Transformers.js</span><span class="tag">WebGPU</span><span class="tag">Vite</span>
+      </div>
+      <div class="shot">
+        <img src="assets/og-image.jpg" alt="BG Eraser: remove image backgrounds instantly in your browser" width="1200" height="630">
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap cols">
+      <div>
+        <p class="eyebrow">Privacy first</p>
+        <h2>Your images never leave your device</h2>
+        <p class="muted">There is no backend. The app is static files, and the segmentation model runs locally with Transformers.js. There is no analytics either.</p>
+        <p class="muted">The only network request after loading is the one-time download of the model files, which your browser then caches.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--ok)">✓ What stays local</h3>
+        <p>Your photos, the masks, and the exported PNGs.</p>
+        <h3 style="margin-top:14px">↓ What is downloaded</h3>
+        <p>App files from the host, and the BRIA RMBG-1.4 model from Hugging Face on first use.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <p class="eyebrow">Features</p>
+      <h2>Everything you need to cut out an image</h2>
+      <div class="grid" style="margin-top:24px">
+        <div class="card"><div class="icon">✨</div><h3>AI mode</h3><p>One-step background removal with the RMBG-1.4 segmentation model.</p></div>
+        <div class="card"><div class="icon">🎯</div><h3>Manual mode</h3><p>Pick colors from the image and set a tolerance. Useful for flat backgrounds.</p></div>
+        <div class="card"><div class="icon">🗂️</div><h3>Batch queue</h3><p>Drop many images at once. They are processed one by one and exported as a ZIP.</p></div>
+        <div class="card"><div class="icon">📱</div><h3>HEIC support</h3><p>iPhone photos are converted in the browser before processing.</p></div>
+        <div class="card"><div class="icon">🖼️</div><h3>Full-size output</h3><p>The result keeps the original resolution, with softened edges.</p></div>
+        <div class="card"><div class="icon">↔️</div><h3>Compare view</h3><p>Check the result against the original before you export.</p></div>
+        <div class="card"><div class="icon">✂️</div><h3>Crop and 2x upscale</h3><p>Free or fixed-ratio crop. The upscale is a simple canvas resize with sharpening, not AI.</p></div>
+        <div class="card"><div class="icon">⌨️</div><h3>Handy details</h3><p>Paste or drag images, copy to clipboard, undo with Ctrl/Cmd+Z, light and dark theme.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <p class="eyebrow">How it works</p>
+      <h2>Four steps, all in the browser</h2>
+      <ol class="steps" style="margin-top:24px">
+        <li><strong>Drop</strong><span>Drag, paste or pick one or more images.</span></li>
+        <li><strong>Segment</strong><span>A copy (max 1024 px) goes through RMBG-1.4 with Transformers.js, on WebGPU.</span></li>
+        <li><strong>Apply</strong><span>The mask is resized to the original size and becomes the alpha channel.</span></li>
+        <li><strong>Export</strong><span>Download a PNG, copy it, or get a ZIP of the batch.</span></li>
+      </ol>
+      <p style="margin-top:20px"><a href="architecture.html">Read the architecture overview →</a></p>
+    </div>
+  </section>
+
+  <section id="notes">
+    <div class="wrap">
+      <p class="eyebrow">Good to know</p>
+      <h2>Honest limits</h2>
+      <div class="grid" style="margin-top:20px">
+        <div class="card"><h3>First run is slower</h3><p>The model has to be downloaded once. Later runs use the browser cache.</p></div>
+        <div class="card"><h3>WebGPU recommended</h3><p>It gives the best speed. Browsers without it may be slow or fail. This fallback is not tested.</p></div>
+        <div class="card"><h3>Fine detail</h3><p>The model sees at most 1024 px, so hair and similar details are limited.</p></div>
+      </div>
+      <p class="note" style="margin-top:20px"><strong>Model license:</strong> the code is MIT, but the BRIA RMBG-1.4 model has its own license terms that may restrict commercial use. Read the <a href="https://huggingface.co/briaai/RMBG-1.4">model card</a> first.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="cta">
+        <h2>Ready to try it?</h2>
+        <p class="muted">Use the app, read the code, or see who built it.</p>
+        <div class="btn-row">
+          <a class="btn primary" href="https://bg-eraser.lovable.app">Open the app</a>
+          <a class="btn" href="https://github.com/ErwannRobin/bg-eraser">Star on GitHub</a>
+          <a class="btn" href="architecture.html">Architecture</a>
+          <a class="btn" href="https://erwann.lovable.app">Portfolio</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Erwann Robin · MIT License</span>
+    <span>
+      <a href="architecture.html">Architecture</a> ·
+      <a href="https://github.com/ErwannRobin/bg-eraser">GitHub</a> ·
+      <a href="https://erwann.lovable.app">Portfolio</a> ·
+      <a href="https://huggingface.co/briaai/RMBG-1.4">Model: BRIA RMBG-1.4</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BG Eraser Architecture</title>
+  <meta name="description" content="Architecture overview of BG Eraser: a global view and a detailed view of how background removal runs fully in the browser.">
+  <link rel="icon" href="assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="assets/favicon.png" alt="">BG Eraser</a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="./">Home</a>
+      <a href="architecture.html" aria-current="page">Architecture</a>
+      <a href="https://github.com/ErwannRobin/bg-eraser">GitHub</a>
+      <a href="https://erwann.lovable.app">Portfolio</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="doc">
+
+    <aside class="toc" aria-label="Contents">
+      <ul>
+        <li class="group">Global view</li>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#system">System diagram</a></li>
+        <li><a href="#principles">Design principles</a></li>
+        <li class="group">Detailed view</li>
+        <li><a href="#components">Components</a></li>
+        <li><a href="#state">State and queue</a></li>
+        <li><a href="#pipeline">AI pipeline</a></li>
+        <li><a href="#manual">Manual mode</a></li>
+        <li><a href="#post">Crop, upscale, export</a></li>
+        <li><a href="#modules">Module reference</a></li>
+        <li class="group">Project</li>
+        <li><a href="#build">Build, test, CI</a></li>
+        <li><a href="#limits">Limits and known gaps</a></li>
+      </ul>
+    </aside>
+
+    <div>
+      <!-- ============ GLOBAL VIEW ============ -->
+      <section id="overview">
+        <span class="view-badge">Global view</span>
+        <h1>Architecture overview</h1>
+        <p class="lead">BG Eraser is a static single-page app. There is no backend. Every image is processed on the user's device, and the only network call at run time is the one-time model download.</p>
+        <div class="grid" style="margin-top:24px">
+          <div class="card"><h3>One tier</h3><p>A React app served as static files. No API, no database, no environment variables.</p></div>
+          <div class="card"><h3>Local inference</h3><p>The RMBG-1.4 model runs in the browser through Transformers.js and ONNX Runtime Web.</p></div>
+          <div class="card"><h3>Canvas pipeline</h3><p>Pixels are handled with the Canvas 2D API. Output is a transparent PNG at the original size.</p></div>
+        </div>
+      </section>
+
+      <section id="system">
+        <h2>System diagram</h2>
+        <p class="muted">What runs where, and what crosses the network.</p>
+        <div class="diagram" role="img" aria-label="System diagram: the browser contains the React UI, the image utilities and the Transformers.js runtime. A static host serves the app. The Hugging Face Hub serves the model once.">
+          <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+              <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head accent" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+
+            <!-- Browser zone -->
+            <rect class="zone" x="20" y="20" width="560" height="430" rx="16"/>
+            <text class="z" x="38" y="46">USER'S BROWSER</text>
+
+            <rect class="box accent" x="50" y="64" width="500" height="92" rx="12"/>
+            <text class="t" x="70" y="92">React UI</text>
+            <text class="s" x="70" y="114">Index page · upload · compare · manual editor · crop editor</text>
+            <text class="s" x="70" y="134">State in React hooks · undo history (20 states)</text>
+
+            <rect class="box" x="50" y="190" width="240" height="108" rx="12"/>
+            <text class="t" x="70" y="218">Image utils</text>
+            <text class="s" x="70" y="240">backgroundRemoval · manual…</text>
+            <text class="s" x="70" y="258">imageUpscale · heicConverter</text>
+            <text class="s" x="70" y="276">Canvas 2D API</text>
+
+            <rect class="box" x="310" y="190" width="240" height="108" rx="12"/>
+            <text class="t" x="330" y="218">Transformers.js</text>
+            <text class="s" x="330" y="240">AutoModel · AutoProcessor</text>
+            <text class="s" x="330" y="258">ONNX Runtime Web</text>
+            <text class="s" x="330" y="276">Browser cache for model files</text>
+
+            <rect class="box" x="310" y="334" width="240" height="84" rx="12"/>
+            <text class="t" x="330" y="362">Compute backend</text>
+            <text class="s" x="330" y="384">WebGPU requested</text>
+            <text class="s" x="330" y="402">WASM fallback (untested here)</text>
+
+            <rect class="box" x="50" y="334" width="240" height="84" rx="12"/>
+            <text class="t" x="70" y="362">Output</text>
+            <text class="s" x="70" y="384">PNG download · clipboard · ZIP</text>
+            <text class="s" x="70" y="402">Blob URLs, nothing leaves the device</text>
+
+            <!-- internal arrows -->
+            <path class="arrow accent" d="M170 156 V190" marker-end="url(#aha)"/>
+            <path class="arrow accent" d="M430 156 V190" marker-end="url(#aha)"/>
+            <path class="arrow" d="M430 298 V334" marker-end="url(#ah)"/>
+            <path class="arrow" d="M170 298 V334" marker-end="url(#ah)"/>
+            <path class="arrow" d="M290 244 H310" marker-end="url(#ah)"/>
+
+            <!-- External -->
+            <rect class="box ext" x="650" y="64" width="230" height="84" rx="12"/>
+            <text class="t" x="668" y="92">Static host</text>
+            <text class="s" x="668" y="114">HTML, JS, CSS from vite build</text>
+            <text class="s" x="668" y="132">Lovable, GitHub Pages, any host</text>
+
+            <rect class="box ext" x="650" y="200" width="230" height="84" rx="12"/>
+            <text class="t" x="668" y="228">Hugging Face Hub</text>
+            <text class="s" x="668" y="250">briaai/RMBG-1.4 model files</text>
+            <text class="s" x="668" y="268">Downloaded once, then cached</text>
+
+            <path class="arrow" d="M650 106 H550" marker-end="url(#ah)"/>
+            <text class="lbl" x="568" y="98">app files</text>
+            <path class="arrow" d="M650 242 H550" marker-end="url(#ah)"/>
+            <text class="lbl" x="560" y="234">model (first run)</text>
+            <path class="arrow" d="M550 242 V270" opacity="0"/>
+
+            <!-- Privacy note -->
+            <rect x="650" y="330" width="230" height="88" rx="12" fill="none" stroke="var(--ok)" stroke-width="1.5"/>
+            <text class="t" x="668" y="358" style="fill:var(--ok)">No image upload</text>
+            <text class="s" x="668" y="380">Your images are never sent</text>
+            <text class="s" x="668" y="398">to any server.</text>
+          </svg>
+        </div>
+      </section>
+
+      <section id="principles">
+        <h2>Design principles</h2>
+        <div class="grid">
+          <div class="card"><h3>Privacy by design</h3><p>No backend means no place to send images to. The app has no analytics.</p></div>
+          <div class="card"><h3>Full resolution output</h3><p>The model sees at most 1024 px. The mask is then resized and applied to the original pixels.</p></div>
+          <div class="card"><h3>Simple state</h3><p>One page component owns the state. Utilities are plain functions with no React dependency.</p></div>
+          <div class="card"><h3>Static deploy</h3><p><code>make build</code> produces <code>dist/</code>. Any static host works.</p></div>
+        </div>
+      </section>
+
+      <!-- ============ DETAILED VIEW ============ -->
+      <section id="components">
+        <span class="view-badge">Detailed view</span>
+        <h2>Components</h2>
+        <p class="muted">Entry: <code>main.tsx</code> mounts <code>App.tsx</code>. Routing has two routes: <code>/</code> and a catch-all 404.</p>
+
+        <div class="diagram" role="img" aria-label="Component tree from App through providers to Index and its child components.">
+          <svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <rect class="box" x="20" y="20" width="250" height="64" rx="10"/>
+            <text class="t" x="36" y="46">App.tsx</text>
+            <text class="s" x="36" y="66">QueryClient · Theme · Tooltip · Router</text>
+
+            <path class="arrow" d="M145 84 V110" marker-end="url(#ah2)"/>
+            <rect class="box" x="20" y="110" width="250" height="52" rx="10"/>
+            <text class="t" x="36" y="134">Routes</text>
+            <text class="s" x="36" y="152">"/" → Index · "*" → 404</text>
+
+            <path class="arrow" d="M270 136 H320" marker-end="url(#ah2)"/>
+
+            <rect class="box accent" x="320" y="100" width="250" height="76" rx="10"/>
+            <text class="t" x="336" y="126">pages/Index.tsx</text>
+            <text class="s" x="336" y="146">Owns images, queue, mode, history</text>
+            <text class="s" x="336" y="162">Export, undo, paste, drag-and-drop</text>
+
+            <!-- children -->
+            <path class="arrow" d="M445 176 V200"/>
+            <path class="arrow" d="M80 200 H820"/>
+            <path d="M80 200 V224" class="arrow" marker-end="url(#ah2)"/>
+            <path d="M260 200 V224" class="arrow" marker-end="url(#ah2)"/>
+            <path d="M440 200 V224" class="arrow" marker-end="url(#ah2)"/>
+            <path d="M620 200 V224" class="arrow" marker-end="url(#ah2)"/>
+            <path d="M820 200 V224" class="arrow" marker-end="url(#ah2)"/>
+
+            <rect class="box" x="10" y="224" width="140" height="84" rx="10"/>
+            <text class="t" x="22" y="250">ImageUpload</text>
+            <text class="s" x="22" y="270">Drop, pick, HEIC</text>
+            <text class="s" x="22" y="288">convert</text>
+
+            <rect class="box" x="190" y="224" width="140" height="84" rx="10"/>
+            <text class="t" x="202" y="250">ThumbnailList</text>
+            <text class="s" x="202" y="270">Batch list and</text>
+            <text class="s" x="202" y="288">item status</text>
+
+            <rect class="box" x="370" y="224" width="140" height="84" rx="10"/>
+            <text class="t" x="382" y="250">ImageComparison</text>
+            <text class="s" x="382" y="270">Before / after,</text>
+            <text class="s" x="382" y="288">action buttons</text>
+
+            <rect class="box" x="550" y="224" width="140" height="84" rx="10"/>
+            <text class="t" x="562" y="250">ManualEditor</text>
+            <text class="s" x="562" y="270">Color picker,</text>
+            <text class="s" x="562" y="288">tolerance</text>
+
+            <rect class="box" x="730" y="224" width="140" height="84" rx="10"/>
+            <text class="t" x="742" y="250">CropEditor</text>
+            <text class="s" x="742" y="270">Free or fixed</text>
+            <text class="s" x="742" y="288">aspect crop</text>
+
+            <rect class="box" x="190" y="340" width="320" height="64" rx="10"/>
+            <text class="t" x="206" y="366">ProcessingIndicator · ThemeToggle</text>
+            <text class="s" x="206" y="386">Progress bar and light/dark switch</text>
+
+            <rect class="box" x="550" y="340" width="320" height="64" rx="10"/>
+            <text class="t" x="566" y="366">components/ui/*</text>
+            <text class="s" x="566" y="386">shadcn/ui (Radix) primitives, Tailwind v4</text>
+          </svg>
+        </div>
+      </section>
+
+      <section id="state">
+        <h2>State and processing queue</h2>
+        <p><code>Index.tsx</code> (about 650 lines) holds all app state in React hooks. There is no global store.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>State</th><th>Type</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>images</code></td><td><code>ProcessedImageItem[]</code></td><td>Every loaded image: original file and URL, result blob and URL, optional 2x original, status.</td></tr>
+              <tr><td><code>selectedImageId</code></td><td><code>string | null</code></td><td>Which image is shown in the main view.</td></tr>
+              <tr><td><code>mode</code></td><td><code>"ai" | "manual"</code></td><td>Chooses model removal or color removal.</td></tr>
+              <tr><td><code>isProcessing</code>, <code>progress</code></td><td>boolean, number</td><td>Drive the progress indicator.</td></tr>
+              <tr><td><code>isCropping</code>, <code>isUpscaling</code>, <code>hasCropped</code></td><td>boolean</td><td>Edit-mode flags.</td></tr>
+              <tr><td><code>processingQueueRef</code></td><td>ref to <code>string[]</code></td><td>FIFO queue of image ids waiting for the model.</td></tr>
+              <tr><td><code>historyRef</code></td><td>ref to <code>HistoryState[]</code></td><td>Undo stack, capped at 20 entries.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Image status flow</h3>
+        <div class="diagram" role="img" aria-label="Status flow: pending to processing to done or error.">
+          <svg viewBox="0 0 900 120" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <rect class="box" x="30" y="30" width="150" height="56" rx="10"/>
+            <text class="t" x="50" y="54">pending</text><text class="s" x="50" y="72">in queue (AI mode)</text>
+            <rect class="box accent" x="270" y="30" width="170" height="56" rx="10"/>
+            <text class="t" x="290" y="54">processing</text><text class="s" x="290" y="72">one image at a time</text>
+            <rect class="box" x="540" y="8" width="150" height="48" rx="10"/>
+            <text class="t" x="560" y="38" style="fill:var(--ok)">done</text>
+            <rect class="box" x="540" y="66" width="150" height="48" rx="10"/>
+            <text class="t" x="560" y="96" style="fill:var(--warn)">error</text>
+            <path class="arrow" d="M180 58 H270" marker-end="url(#ah3)"/>
+            <path class="arrow" d="M440 50 L540 34" marker-end="url(#ah3)"/>
+            <path class="arrow" d="M440 66 L540 90" marker-end="url(#ah3)"/>
+            <text class="lbl" x="722" y="38">Manual mode adds images as "done"</text>
+            <text class="lbl" x="722" y="54">directly, with no model run.</text>
+          </svg>
+        </div>
+
+        <h3>How the queue works</h3>
+        <ol class="steps">
+          <li><strong>Enqueue</strong><span><code>handleFilesSelect</code> creates items with status <code>pending</code> and pushes their ids to <code>processingQueueRef</code>.</span></li>
+          <li><strong>Guard</strong><span><code>processNextInQueue</code> returns early if the queue is empty or <code>isProcessingRef</code> is set. Only one image runs at a time.</span></li>
+          <li><strong>Process</strong><span>It loads the file with <code>loadImage</code>, calls <code>removeBackground</code>, and stores the result blob and an object URL.</span></li>
+          <li><strong>Finish</strong><span>In a <code>finally</code> block it shifts the queue, clears the flag, and schedules the next item with <code>setTimeout</code>.</span></li>
+        </ol>
+        <p class="muted" style="margin-top:14px">Undo: <code>saveToHistory()</code> is called before crop, upscale and manual edits. <code>Ctrl/Cmd+Z</code> pops the last snapshot.</p>
+      </section>
+
+      <section id="pipeline">
+        <h2>AI pipeline</h2>
+        <p>Implemented in <code>src/utils/backgroundRemoval.ts</code>. The function <code>removeBackground(img, onProgress)</code> returns a PNG <code>Blob</code>.</p>
+        <div class="diagram" role="img" aria-label="Pipeline: original image, downscale to 1024px, model inference, mask resize to full size, feathered alpha, PNG.">
+          <svg viewBox="0 0 900 190" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head accent" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <g>
+              <rect class="box" x="10" y="40" width="130" height="90" rx="10"/>
+              <text class="t" x="22" y="68">1 Original</text><text class="s" x="22" y="90">HTMLImage</text><text class="s" x="22" y="108">full size</text>
+              <rect class="box" x="165" y="40" width="130" height="90" rx="10"/>
+              <text class="t" x="177" y="68">2 Downscale</text><text class="s" x="177" y="90">max side</text><text class="s" x="177" y="108">1024 px</text>
+              <rect class="box accent" x="320" y="40" width="130" height="90" rx="10"/>
+              <text class="t" x="332" y="68">3 Model</text><text class="s" x="332" y="90">RMBG-1.4</text><text class="s" x="332" y="108">mask output</text>
+              <rect class="box" x="475" y="40" width="130" height="90" rx="10"/>
+              <text class="t" x="487" y="68">4 Resize mask</text><text class="s" x="487" y="90">back to the</text><text class="s" x="487" y="108">original size</text>
+              <rect class="box" x="630" y="40" width="130" height="90" rx="10"/>
+              <text class="t" x="642" y="68">5 Feather</text><text class="s" x="642" y="90">Gaussian blur</text><text class="s" x="642" y="108">radius 3 px</text>
+              <rect class="box" x="785" y="40" width="105" height="90" rx="10"/>
+              <text class="t" x="797" y="68">6 PNG</text><text class="s" x="797" y="90">alpha =</text><text class="s" x="797" y="108">mask</text>
+            </g>
+            <path class="arrow accent" d="M140 85 H165" marker-end="url(#ah4)"/>
+            <path class="arrow accent" d="M295 85 H320" marker-end="url(#ah4)"/>
+            <path class="arrow accent" d="M450 85 H475" marker-end="url(#ah4)"/>
+            <path class="arrow accent" d="M605 85 H630" marker-end="url(#ah4)"/>
+            <path class="arrow accent" d="M760 85 H785" marker-end="url(#ah4)"/>
+          </svg>
+        </div>
+
+        <h3>Step details</h3>
+        <ol class="steps">
+          <li><strong>Downscale</strong><span><code>createModelCanvas</code> keeps the aspect ratio and limits the longest side to <code>MAX_MODEL_DIMENSION = 1024</code>.</span></li>
+          <li><strong>Load model and processor</strong><span><code>AutoModel.from_pretrained('briaai/RMBG-1.4', { device: 'webgpu' })</code> and an <code>AutoProcessor</code> with a fixed config (mean 0.5, std 1, size 1024x1024). The browser cache keeps the files after the first download.</span></li>
+          <li><strong>Infer</strong><span>The processor produces <code>pixel_values</code>. The model returns <code>output</code>, a mask tensor.</span></li>
+          <li><strong>Resize the mask</strong><span>The mask is converted to uint8 and resized to the original width and height with <code>RawImage.resize</code>.</span></li>
+          <li><strong>Feather</strong><span><code>applyAlphaMatting</code> blurs the mask with a Gaussian kernel (radius 3) and writes it into the alpha channel of the original pixels.</span></li>
+          <li><strong>Encode</strong><span><code>canvas.toBlob('image/png')</code> returns the transparent PNG.</span></li>
+        </ol>
+        <p class="muted" style="margin-top:14px">Progress is reported at fixed steps: 5, 15, 40, 50, 75, 85, 95, 100.</p>
+      </section>
+
+      <section id="manual">
+        <h2>Manual mode</h2>
+        <p>Implemented in <code>manualBackgroundRemoval.ts</code> and <code>ManualEditor.tsx</code>. No model is used.</p>
+        <ul>
+          <li>The user picks colors from the image (<code>getColorAtPixel</code>) or from a color input (<code>hexToRgb</code>).</li>
+          <li>Each pixel whose RGB distance to a picked color is below the tolerance (default 30) gets alpha 0 (<code>removeColorFromImage</code>, <code>colorDistance</code>).</li>
+          <li>The result is returned to <code>Index</code> through <code>onProcessed(blob, url)</code>, after an undo snapshot.</li>
+        </ul>
+      </section>
+
+      <section id="post">
+        <h2>Crop, upscale and export</h2>
+        <div class="grid">
+          <div class="card"><h3>Crop</h3><p><code>CropEditor</code> is a canvas UI with free or fixed aspect ratios and zoom. It returns a new blob through <code>onCropApplied</code>.</p></div>
+          <div class="card"><h3>2x upscale</h3><p><code>upscaleImage</code> draws the image at 2x with canvas interpolation, then applies a 3x3 sharpen kernel. It is not an AI upscaler. Both the result and the original are upscaled.</p></div>
+          <div class="card"><h3>HEIC input</h3><p><code>heicConverter</code> loads <code>heic-convert/browser</code> on demand and returns a JPEG <code>File</code> at quality 0.9.</p></div>
+          <div class="card"><h3>Export</h3><p>PNG download, clipboard copy (<code>navigator.clipboard.write</code>), or a ZIP of all results built with JSZip.</p></div>
+        </div>
+        <p class="muted" style="margin-top:14px">Images can also come from drag-and-drop on the whole page, a file picker, or a paste event.</p>
+      </section>
+
+      <section id="modules">
+        <h2>Module reference</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Path</th><th>Role</th><th>Tests</th></tr></thead>
+            <tbody>
+              <tr><td><code>src/pages/Index.tsx</code></td><td>Main screen, state, queue, export, undo</td><td>none</td></tr>
+              <tr><td><code>src/pages/NotFound.tsx</code></td><td>404 page</td><td>yes</td></tr>
+              <tr><td><code>src/components/ImageUpload.tsx</code></td><td>Drop zone and file picker, HEIC conversion</td><td>yes</td></tr>
+              <tr><td><code>src/components/ImageThumbnailList.tsx</code></td><td>Batch list</td><td>yes</td></tr>
+              <tr><td><code>src/components/ProcessingIndicator.tsx</code></td><td>Progress UI</td><td>yes</td></tr>
+              <tr><td><code>src/components/ImageComparison.tsx</code></td><td>Before/after view and actions</td><td>none</td></tr>
+              <tr><td><code>src/components/ManualEditor.tsx</code></td><td>Manual color removal UI</td><td>none</td></tr>
+              <tr><td><code>src/components/CropEditor.tsx</code></td><td>Crop UI (about 490 lines)</td><td>none</td></tr>
+              <tr><td><code>src/utils/backgroundRemoval.ts</code></td><td>AI pipeline, <code>loadImage</code></td><td>none</td></tr>
+              <tr><td><code>src/utils/manualBackgroundRemoval.ts</code></td><td>Color math and removal</td><td>yes</td></tr>
+              <tr><td><code>src/utils/imageUpscale.ts</code></td><td>2x upscale and sharpen</td><td>yes</td></tr>
+              <tr><td><code>src/utils/heicConverter.ts</code></td><td>HEIC/HEIF to JPEG</td><td>yes</td></tr>
+              <tr><td><code>src/utils/imageCrop.ts</code></td><td>Crop to non-transparent bounds (see known gaps)</td><td>yes</td></tr>
+              <tr><td><code>src/hooks/use-toast.ts</code>, <code>use-mobile.tsx</code></td><td>Toast store, mobile breakpoint</td><td>yes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ PROJECT ============ -->
+      <section id="build">
+        <h2>Build, test and CI</h2>
+        <div class="grid">
+          <div class="card"><h3>Stack</h3><p>React 18, TypeScript, Vite (SWC), Tailwind CSS v4, shadcn/ui, Transformers.js, JSZip, heic-convert.</p></div>
+          <div class="card"><h3>Tests</h3><p>Vitest with Testing Library. A canvas helper in <code>src/test/canvas.ts</code> mocks canvas APIs.</p></div>
+          <div class="card"><h3>CI</h3><p>GitHub Actions, Node 22, four parallel jobs: lint, typecheck, test with coverage, build.</p></div>
+        </div>
+<pre><code>make install   # npm ci
+make dev       # http://localhost:8080
+make check     # lint, typecheck, test, build
+make build     # static site in dist/</code></pre>
+      </section>
+
+      <section id="limits">
+        <h2>Limits and known gaps</h2>
+        <p class="note"><strong>Honest list.</strong> These come from reading the code, not from a security audit or benchmark.</p>
+        <ul style="margin-top:16px">
+          <li><strong>WASM fallback is untested.</strong> The code requests <code>webgpu</code>. The comment says it falls back to WASM, and the README says this is not tested.</li>
+          <li><strong>Model input is capped at 1024 px.</strong> Fine details such as hair are limited by that size.</li>
+          <li><strong>Feathering is a plain Gaussian blur of the mask.</strong> It is not a true alpha matting algorithm, although the function is named that way. It also loops over a kernel per pixel on the main thread, so very large images can freeze the UI for a moment.</li>
+          <li><strong>Memory.</strong> Large images use a lot of browser memory. Object URLs are revoked on reset, but not on every intermediate edit.</li>
+          <li><strong><code>cropToContent</code> is unused.</strong> <code>imageCrop.ts</code> is only referenced by its own test. It can be wired in or removed.</li>
+          <li><strong>Large page component.</strong> <code>Index.tsx</code> mixes queue, export and editing logic. Splitting it into hooks would help testing.</li>
+          <li><strong>Model license.</strong> RMBG-1.4 has its own license terms. Check them before commercial use.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>BG Eraser · MIT License</span>
+    <span>
+      <a href="./">Home</a> ·
+      <a href="https://github.com/ErwannRobin/bg-eraser">GitHub</a> ·
+      <a href="https://erwann.lovable.app">Portfolio</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
