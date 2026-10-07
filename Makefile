@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev build build-dev preview lint typecheck check audit clean distclean
+.PHONY: help install dev build build-dev preview lint typecheck test test-watch coverage check audit clean distclean
 
 NPM ?= npm
 
@@ -27,13 +27,22 @@ lint: ## Run ESLint
 typecheck: ## Run the TypeScript compiler without emitting files
 	npx tsc -p tsconfig.app.json --noEmit
 
-check: lint typecheck build ## Run lint, typecheck and build (use before a PR)
+test: ## Run the unit tests once
+	$(NPM) test
+
+test-watch: ## Run the unit tests in watch mode
+	$(NPM) run test:watch
+
+coverage: ## Run the unit tests with a coverage report
+	$(NPM) run test:coverage
+
+check: lint typecheck test build ## Run lint, typecheck, tests and build (use before a PR)
 
 audit: ## Check production dependencies for known vulnerabilities
 	$(NPM) audit --omit=dev
 
 clean: ## Remove build output
-	rm -rf dist dist-ssr
+	rm -rf dist dist-ssr coverage
 
 distclean: clean ## Remove build output and node_modules
 	rm -rf node_modules

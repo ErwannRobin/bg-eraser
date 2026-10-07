@@ -28,7 +28,7 @@ Run `make help` to see all targets.
 1. Fork the repo and create a branch from `main` (for example `fix/crop-ratio`).
 2. Keep the change small and focused. One topic per pull request.
 3. Follow the style of the surrounding code (TypeScript, React function components, Tailwind).
-4. Run `make check` (lint, typecheck, build). It must pass before you open the PR.
+4. Run `make check` (lint, typecheck, tests, build). It must pass before you open the PR.
 5. Open a pull request and fill in the template. Add a screenshot or GIF for UI changes.
 
 ## Notes
