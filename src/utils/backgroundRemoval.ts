@@ -8,6 +8,42 @@ env.backends.onnx.wasm.numThreads = 1; // Optimize for web workers
 
 const MAX_MODEL_DIMENSION = 1024;
 
+// iOS Safari kills the tab when memory runs out ("A problem repeatedly occurred"). The
+// full-resolution steps below hold many pixel-sized buffers, so cap the output size there.
+const MAX_OUTPUT_PIXELS_IOS = 4_000_000;
+
+function isIOS(): boolean {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+// Size of the result: the original size, reduced on iOS when the image is too large.
+function getOutputSize(image: HTMLImageElement): { width: number; height: number } {
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  if (!isIOS() || width * height <= MAX_OUTPUT_PIXELS_IOS) return { width, height };
+  const ratio = Math.sqrt(MAX_OUTPUT_PIXELS_IOS / (width * height));
+  return { width: Math.round(width * ratio), height: Math.round(height * ratio) };
+}
+
+// Load the model once. Loading it on every image leaked GPU/WASM memory.
+let modelPromise: Promise<{
+  model: Awaited<ReturnType<typeof AutoModel.from_pretrained>>;
+  processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>>;
+}> | null = null;
+
+function getModel() {
+  if (!modelPromise) {
+    modelPromise = loadModel().catch((error) => {
+      modelPromise = null; // allow a retry
+      throw error;
+    });
+  }
+  return modelPromise;
+}
+
 // Guided filter settings used to sharpen the upscaled mask against the original image
 const GUIDED_FILTER_EPS = 1e-3;
 const FEATHER_RADIUS = 1;
@@ -82,6 +118,35 @@ function applyAlphaMatting(
   }
 }
 
+async function loadModel() {
+  // WebGPU when the browser has it, WASM otherwise
+  const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
+  const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
+    device,
+    // transformers.js config typings do not cover this custom model
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    config: { model_type: 'custom' } as any,
+  });
+
+  const processor = await AutoProcessor.from_pretrained('briaai/RMBG-1.4', {
+    config: {
+      do_normalize: true,
+      do_pad: false,
+      do_rescale: true,
+      do_resize: true,
+      image_mean: [0.5, 0.5, 0.5],
+      feature_extractor_type: "ImageFeatureExtractor",
+      image_std: [1, 1, 1],
+      resample: 2,
+      rescale_factor: 0.00392156862745098,
+      size: { width: 1024, height: 1024 },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any
+  });
+
+  return { model, processor };
+}
+
 export const removeBackground = async (
   imageElement: HTMLImageElement,
   onProgress?: (progress: number) => void
@@ -94,29 +159,7 @@ export const removeBackground = async (
     
     if (onProgress) onProgress(15);
     
-    // Initialize RMBG model with WebGPU (falls back to WASM automatically)
-    const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
-      device: 'webgpu',
-      // transformers.js config typings do not cover this custom model
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      config: { model_type: 'custom' } as any,
-    });
-    
-    const processor = await AutoProcessor.from_pretrained('briaai/RMBG-1.4', {
-      config: {
-        do_normalize: true,
-        do_pad: false,
-        do_rescale: true,
-        do_resize: true,
-        image_mean: [0.5, 0.5, 0.5],
-        feature_extractor_type: "ImageFeatureExtractor",
-        image_std: [1, 1, 1],
-        resample: 2,
-        rescale_factor: 0.00392156862745098,
-        size: { width: 1024, height: 1024 },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any
-    });
+    const { model, processor } = await getModel();
     
     if (onProgress) onProgress(40);
     
@@ -135,8 +178,7 @@ export const removeBackground = async (
     }
     
     // Create output canvas at FULL original resolution
-    const fullWidth = imageElement.naturalWidth;
-    const fullHeight = imageElement.naturalHeight;
+    const { width: fullWidth, height: fullHeight } = getOutputSize(imageElement);
     const outputCanvas = document.createElement('canvas');
     outputCanvas.width = fullWidth;
     outputCanvas.height = fullHeight;
@@ -145,7 +187,7 @@ export const removeBackground = async (
     if (!outputCtx) throw new Error('Could not get output canvas context');
     
     // Draw original full-resolution image
-    outputCtx.drawImage(imageElement, 0, 0);
+    outputCtx.drawImage(imageElement, 0, 0, fullWidth, fullHeight);
     
     if (onProgress) onProgress(85);
     
