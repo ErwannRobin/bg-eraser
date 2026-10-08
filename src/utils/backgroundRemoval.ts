@@ -1,4 +1,5 @@
 import { AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
+import { guidedFilter } from './guidedFilter';
 
 // Configure transformers.js for optimal browser performance
 env.allowLocalModels = false;
@@ -6,6 +7,10 @@ env.useBrowserCache = true;
 env.backends.onnx.wasm.numThreads = 1; // Optimize for web workers
 
 const MAX_MODEL_DIMENSION = 1024;
+
+// Guided filter settings used to sharpen the upscaled mask against the original image
+const GUIDED_FILTER_EPS = 1e-3;
+const FEATHER_RADIUS = 1;
 
 function createModelCanvas(image: HTMLImageElement): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -150,14 +155,27 @@ export const removeBackground = async (
     // Resize mask to full resolution
     const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(fullWidth, fullHeight);
     
-    // Convert mask to Float32Array for alpha matting
+    // Convert mask to Float32Array
     const maskFloat = new Float32Array(mask.data.length);
     for (let i = 0; i < mask.data.length; i++) {
       maskFloat[i] = mask.data[i] / 255;
     }
     
-    // Apply alpha matting with edge feathering
-    applyAlphaMatting(outputImageData, maskFloat, 3);
+    // The model saw a downscaled copy, so the upscaled mask is blurry. Snap its edges
+    // back onto the real edges of the full-resolution image. The radius grows with the
+    // upscale factor.
+    const scale = Math.max(fullWidth, fullHeight) / MAX_MODEL_DIMENSION;
+    const refined = guidedFilter(
+      outputImageData.data,
+      maskFloat,
+      fullWidth,
+      fullHeight,
+      Math.max(2, Math.round(scale * 2)),
+      GUIDED_FILTER_EPS
+    );
+    
+    // Apply alpha matting with a light edge feathering
+    applyAlphaMatting(outputImageData, refined, FEATHER_RADIUS);
     
     outputCtx.putImageData(outputImageData, 0, 0);
     
