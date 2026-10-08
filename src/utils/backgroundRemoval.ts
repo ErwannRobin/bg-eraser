@@ -1,5 +1,6 @@
 import { AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
 import { guidedFilter } from './guidedFilter';
+import { debugLog, forcedDevice, logWebGpuInfo } from './debugLog';
 
 // Configure transformers.js for optimal browser performance
 env.allowLocalModels = false;
@@ -120,7 +121,11 @@ function applyAlphaMatting(
 
 async function loadModel() {
   // WebGPU when the browser has it, WASM otherwise
-  const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
+  // ?device=wasm or ?device=webgpu in the URL overrides the choice (see debugLog.ts)
+  const device = forcedDevice ?? ('gpu' in navigator ? 'webgpu' : 'wasm');
+  debugLog('loading model', { device });
+  await logWebGpuInfo();
+  const t0 = performance.now();
   const model = await AutoModel.from_pretrained('briaai/RMBG-1.4', {
     device,
     // transformers.js config typings do not cover this custom model
@@ -144,6 +149,7 @@ async function loadModel() {
     } as any
   });
 
+  debugLog('model and processor loaded', `${Math.round(performance.now() - t0)} ms`);
   return { model, processor };
 }
 
@@ -152,24 +158,35 @@ export const removeBackground = async (
   onProgress?: (progress: number) => void
 ): Promise<Blob> => {
   try {
+    debugLog('removeBackground start', {
+      image: `${imageElement.naturalWidth}x${imageElement.naturalHeight}`,
+      ios: isIOS(),
+    });
     if (onProgress) onProgress(5);
     
     // Create a small canvas for the model (max 1024px)
     const modelCanvas = createModelCanvas(imageElement);
     
+    debugLog('model canvas', `${modelCanvas.width}x${modelCanvas.height}`);
     if (onProgress) onProgress(15);
     
     const { model, processor } = await getModel();
     
+    debugLog('model ready (progress 40)');
     if (onProgress) onProgress(40);
     
     // Run model on small canvas
     const image = await RawImage.fromURL(modelCanvas.toDataURL('image/png'));
     
+    debugLog('image for model ready (progress 50)', `${image.width}x${image.height}`);
     if (onProgress) onProgress(50);
     
+    debugLog('preprocessing');
     const { pixel_values } = await processor(image);
+    debugLog('preprocessing done, running inference', { dims: pixel_values.dims });
+    const tInference = performance.now();
     const { output } = await model({ input: pixel_values });
+    debugLog('inference done', `${Math.round(performance.now() - tInference)} ms`);
     
     if (onProgress) onProgress(75);
     
@@ -189,6 +206,7 @@ export const removeBackground = async (
     // Draw original full-resolution image
     outputCtx.drawImage(imageElement, 0, 0, fullWidth, fullHeight);
     
+    debugLog('full-resolution image data read', `${fullWidth}x${fullHeight}`);
     if (onProgress) onProgress(85);
     
     // Get full-res image data
@@ -197,6 +215,7 @@ export const removeBackground = async (
     // Resize mask to full resolution
     const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(fullWidth, fullHeight);
     
+    debugLog('mask resized to full resolution');
     // Convert mask to Float32Array
     const maskFloat = new Float32Array(mask.data.length);
     for (let i = 0; i < mask.data.length; i++) {
@@ -207,6 +226,7 @@ export const removeBackground = async (
     // back onto the real edges of the full-resolution image. The radius grows with the
     // upscale factor.
     const scale = Math.max(fullWidth, fullHeight) / MAX_MODEL_DIMENSION;
+    debugLog('guided filter start', { scale });
     const refined = guidedFilter(
       outputImageData.data,
       maskFloat,
@@ -216,11 +236,13 @@ export const removeBackground = async (
       GUIDED_FILTER_EPS
     );
     
+    debugLog('guided filter done');
     // Apply alpha matting with a light edge feathering
     applyAlphaMatting(outputImageData, refined, FEATHER_RADIUS);
     
     outputCtx.putImageData(outputImageData, 0, 0);
     
+    debugLog('alpha applied, encoding PNG (progress 95)');
     if (onProgress) onProgress(95);
     
     // Convert to high-quality PNG blob
@@ -228,6 +250,7 @@ export const removeBackground = async (
       outputCanvas.toBlob(
         (blob) => {
           if (blob) {
+            debugLog('done', `${blob.size} bytes`);
             if (onProgress) onProgress(100);
             resolve(blob);
           } else {
@@ -239,6 +262,7 @@ export const removeBackground = async (
       );
     });
   } catch (error) {
+    debugLog('removeBackground FAILED', error);
     console.error('Background removal error:', error);
     throw error;
   }
