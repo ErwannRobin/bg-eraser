@@ -121,8 +121,9 @@ function applyAlphaMatting(
 
 async function loadModel() {
   // WebGPU when the browser has it, WASM otherwise
-  // ?device=wasm or ?device=webgpu in the URL overrides the choice (see debugLog.ts)
-  const device = forcedDevice ?? ('gpu' in navigator ? 'webgpu' : 'wasm');
+  // WebGPU crashes the tab on iOS Safari (iPhone 16, Safari 27.0.1) while the model runs,
+  // so iOS uses WASM. ?device=wasm|webgpu or the debug panel button overrides the choice.
+  const device = forcedDevice ?? (!isIOS() && 'gpu' in navigator ? 'webgpu' : 'wasm');
   debugLog('loading model', { device });
   await logWebGpuInfo();
   const t0 = performance.now();

@@ -39,6 +39,7 @@ Manual mode (`src/utils/manualBackgroundRemoval.ts`) skips the model. Every pixe
 ### Limitations
 
 - The first run is slow because of the model download.
+- On iOS the app uses the WASM backend, because WebGPU crashed Safari on an iPhone 16 (iOS 27.0.1). It takes about 15 s for a 3 MP image. Add `?debug=1` to the URL to see a log panel and switch the backend.
 - WebGPU gives the best speed. Browsers without WebGPU may fail or be slow; this fallback is not tested in this repository.
 - The model still sees at most 1024 px. The guided filter sharpens edges, but it cannot recover shapes the model did not see, so very fine details (hair, for example) stay limited.
 - Large images use a lot of browser memory.
