@@ -1,6 +1,7 @@
 // Debug helpers, enabled with URL parameters:
 //   ?debug=1          show the on-screen log panel
 //   ?device=wasm      force the WASM backend ("webgpu" forces WebGPU)
+// The panel also has a button for the device; the choice is saved in localStorage.
 // Logs always go to the console. They are also saved in localStorage, so they survive
 // the page reload that follows an iOS Safari tab crash.
 
@@ -10,10 +11,36 @@ const MAX_ENTRIES = 300;
 const params = new URLSearchParams(window.location.search);
 
 export const debugEnabled = params.get('debug') === '1';
-export const forcedDevice: 'wasm' | 'webgpu' | null =
-  params.get('device') === 'wasm' || params.get('device') === 'webgpu'
-    ? (params.get('device') as 'wasm' | 'webgpu')
-    : null;
+const DEVICE_KEY = 'bg-eraser-device';
+type Device = 'wasm' | 'webgpu';
+
+function readDevice(): Device | null {
+  const fromUrl = params.get('device');
+  if (fromUrl === 'wasm' || fromUrl === 'webgpu') return fromUrl;
+  try {
+    const saved = localStorage.getItem(DEVICE_KEY);
+    return saved === 'wasm' || saved === 'webgpu' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export const forcedDevice: Device | null = readDevice();
+
+// Cycle auto -> wasm -> webgpu -> auto, then reload so the model is loaded again.
+export function cycleDevice(): void {
+  const next = forcedDevice === null ? 'wasm' : forcedDevice === 'wasm' ? 'webgpu' : null;
+  try {
+    if (next) localStorage.setItem(DEVICE_KEY, next);
+    else localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // ignore
+  }
+  // drop ?device= from the URL, otherwise it would win over the saved choice
+  const url = new URL(window.location.href);
+  url.searchParams.delete('device');
+  window.location.replace(url.toString());
+}
 
 const sessionId = Math.random().toString(36).slice(2, 6);
 const startTime = performance.now();
@@ -73,6 +100,7 @@ export function installGlobalDebugHooks(): void {
     cores: navigator.hardwareConcurrency,
     deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
     forcedDevice,
+    url: window.location.href,
   });
   window.addEventListener('error', (e) => debugLog('window error', e.message));
   window.addEventListener('unhandledrejection', (e) => debugLog('unhandled rejection', String(e.reason)));

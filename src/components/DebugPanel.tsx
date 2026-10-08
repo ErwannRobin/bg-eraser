@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { clearDebugLog, debugEnabled, getDebugLog, subscribeDebugLog } from '@/utils/debugLog';
+import { clearDebugLog, cycleDevice, debugEnabled, forcedDevice, getDebugLog, subscribeDebugLog } from '@/utils/debugLog';
 
 // On-screen log, shown with ?debug=1. Logs from before a crash are kept (see debugLog.ts).
 const DebugPanel = () => {
@@ -13,6 +13,9 @@ const DebugPanel = () => {
       <div className="mb-1 flex gap-2">
         <button className="rounded border px-2 py-0.5" onClick={copy}>Copy</button>
         <button className="rounded border px-2 py-0.5" onClick={clearDebugLog}>Clear</button>
+        <button className="rounded border px-2 py-0.5" onClick={cycleDevice}>
+          Device: {forcedDevice ?? 'auto'} (tap to change)
+        </button>
         <span className="opacity-70">{lines.length} lines (kept after a crash)</span>
       </div>
       {lines.map((line, i) => (
