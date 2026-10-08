@@ -24,8 +24,9 @@ BG Eraser is a static single-page app. The AI model runs on your device through 
 1. **Load.** The image is loaded into an `<img>`. HEIC/HEIF files are converted to JPEG first (`src/utils/heicConverter.ts`).
 2. **Downscale for the model.** A copy of the image is resized so its longest side is at most 1024 px.
 3. **Segment.** `briaai/RMBG-1.4` runs through Transformers.js and returns a foreground mask. The model is requested with the `webgpu` device (`src/utils/backgroundRemoval.ts`).
-4. **Apply the mask at full size.** The mask is resized to the original resolution and used as the alpha channel of the original pixels. A small Gaussian blur (radius 3 px) smooths the edges.
-5. **Export.** The canvas is encoded as a PNG with transparency.
+4. **Refine the mask at full size.** The mask is resized to the original resolution. A guided filter (`src/utils/guidedFilter.ts`) then uses the original pixels as a guide to snap the mask edges onto the real image edges, which keeps Full HD and larger images sharp.
+5. **Apply.** The refined mask becomes the alpha channel of the original pixels, with a very light blur (radius 1 px) on the edges.
+6. **Export.** The canvas is encoded as a PNG with transparency.
 
 Manual mode (`src/utils/manualBackgroundRemoval.ts`) skips the model. Every pixel whose RGB distance to a picked color is below the tolerance becomes transparent.
 
@@ -39,7 +40,7 @@ Manual mode (`src/utils/manualBackgroundRemoval.ts`) skips the model. Every pixe
 
 - The first run is slow because of the model download.
 - WebGPU gives the best speed. Browsers without WebGPU may fail or be slow; this fallback is not tested in this repository.
-- The model sees at most 1024 px, so very fine details (hair, for example) are limited by that resolution.
+- The model still sees at most 1024 px. The guided filter sharpens edges, but it cannot recover shapes the model did not see, so very fine details (hair, for example) stay limited.
 - Large images use a lot of browser memory.
 
 ## Tech stack
