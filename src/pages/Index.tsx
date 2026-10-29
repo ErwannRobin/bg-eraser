@@ -14,6 +14,7 @@ import { isHeicFile, convertHeicToJpeg } from "@/utils/heicConverter";
 import { useToast } from "@/hooks/use-toast";
 import { Wand2, Sparkles, Pipette, Download, Copy, Maximize2, Archive } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "react-router-dom";
 import JSZip from "jszip";
 
 // History state type for undo
@@ -645,6 +646,10 @@ const Index = () => {
             Vibe coded with ❤️ by <a href="https://erwann.lovable.app">Erwann</a>
             <br />
             All processing happens in your browser. Your images never leave your device.
+            <br />
+            <Link to="/about" className="underline hover:text-foreground">About</Link>
+            {" · "}
+            <a href="https://github.com/ErwannRobin/bg-eraser" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">GitHub</a>
           </p>
         </footer>
       </div>
