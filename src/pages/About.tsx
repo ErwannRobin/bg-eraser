@@ -72,6 +72,23 @@ const About = () => (
       </section>
 
       <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-2">The model</h2>
+        <p className="text-muted-foreground">
+          Background removal uses{" "}
+          <a
+            href="https://huggingface.co/briaai/RMBG-1.4"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            BRIA RMBG-1.4
+          </a>
+          , an image segmentation model. It runs on your device through ONNX Runtime Web, so
+          nothing is sent to a server.
+        </p>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold mb-2">Built with</h2>
         <p className="text-muted-foreground">
           React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Transformers.js, heic-convert and
